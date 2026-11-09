@@ -7,6 +7,7 @@ const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
 const feeds = require('./feeds');
+const { addProduct } = require('./catalog');
 
 const CONDITIONS = ['New', 'Handmade', 'Like new', 'Used, good'];
 const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
@@ -155,6 +156,30 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
       return res.status(201).json({ ok: true, store: 'Individual seller', amount: l.price });
     }
     res.status(400).json({ error: 'Send an offerId or listingId.' });
+  });
+
+  // Products the site owner adds by hand: pick a product on a store, paste its link and price.
+  // With CUELINKS_CID set, those links earn commission when shoppers click through.
+  const manualProducts = () => db.prepare("SELECT * FROM products WHERE source = 'manual' ORDER BY id DESC LIMIT 200").all()
+    .map(p => ({ ...p, offers: offersFor.all(p.id) }));
+  app.get('/api/admin/products', requireAdmin, (_req, res) => res.json(manualProducts()));
+  app.post('/api/admin/products', requireAdmin, (req, res) => {
+    const r = addProduct(db, req.body, 'manual');
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    res.status(201).json(manualProducts().find(p => p.id === r.id));
+  });
+  app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    const p = db.prepare("SELECT id FROM products WHERE id = ? AND source = 'manual'").get(id);
+    if (!p) return res.status(404).json({ error: 'Product not found.' });
+    db.exec('BEGIN');
+    try {
+      db.prepare('UPDATE purchases SET product_id = NULL WHERE product_id = ?').run(id);  // keep Linezo history
+      db.prepare('DELETE FROM offers WHERE product_id = ?').run(id);
+      db.prepare('DELETE FROM products WHERE id = ?').run(id);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    res.json({ ok: true });
   });
 
   // Products that store feeds first showed us in the last N days (default 20).

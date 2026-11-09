@@ -205,3 +205,8 @@ footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
 /* With many categories, keep each chip row to one line that scrolls sideways. */
 #cats,#subcats,#typecats{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; padding-bottom:4px; -webkit-overflow-scrolling:touch}
 #cats > *,#subcats > *,#typecats > *{flex:none; white-space:nowrap}
+.offer-rows{display:flex; flex-direction:column; gap:10px; margin-bottom:10px}
+.offer-row{display:grid; grid-template-columns:1.2fr .8fr .8fr .8fr; gap:8px; align-items:end; padding:10px; border:1px solid var(--line); border-radius:8px}
+.offer-row .field.wide{grid-column:1 / -2}
+@media (max-width:640px){.offer-row{grid-template-columns:1fr 1fr}.offer-row .field.wide{grid-column:1 / -1}}
+.copy-box{width:100%; min-height:160px; font-family:"IBM Plex Mono",monospace; font-size:12px}

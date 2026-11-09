@@ -6,6 +6,10 @@ const SEARCH = {
   'Meesho': q => `https://www.meesho.com/search?q=${encodeURIComponent(q)}`,
   'Myntra': q => `https://www.myntra.com/${encodeURIComponent(q.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}`,
   'JioMart': q => `https://www.jiomart.com/search/${encodeURIComponent(q)}`,
+  'Ajio': q => `https://www.ajio.com/search/?text=${encodeURIComponent(q)}`,
+  'BigBasket': q => `https://www.bigbasket.com/ps/?q=${encodeURIComponent(q)}`,
+  'FirstCry': q => `https://www.firstcry.com/search?q=${encodeURIComponent(q)}`,
+  'Nykaa': q => `https://www.nykaa.com/search/result/?q=${encodeURIComponent(q)}`,
   'Snapdeal': q => `https://www.snapdeal.com/search?keyword=${encodeURIComponent(q)}`,
 };
 

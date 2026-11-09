@@ -2,7 +2,7 @@
 (() => {
 const STORE_COLORS = {
   'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c',
-  'JioMart': '#1f7a8c', 'Snapdeal': '#d23b3b', 'Individual seller': '#0f5a4f'
+  'JioMart': '#1f7a8c', 'Snapdeal': '#d23b3b', 'Ajio': '#2c4152', 'BigBasket': '#689f38', 'FirstCry': '#f2711c', 'Nykaa': '#e80071', 'Individual seller': '#0f5a4f'
 };
 const CATS = {
   Electronics: { c: '#2f5d8a', i: '<path d="M5 14a7 7 0 0114 0v4a2 2 0 01-2 2h-1v-6h3M5 14v4a2 2 0 002 2h1v-6H5" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
