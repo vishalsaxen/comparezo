@@ -1,11 +1,11 @@
 # Comparezo
 
-Comparezo helps shoppers in India find the cheapest place to buy. One search shows a product's price on Meesho, Amazon.in, Flipkart, Myntra, JioMart, Snapdeal and others side by side. The cheapest store is worked out from what you actually pay: listed price plus delivery, minus coupons. Individuals can also list their own products for sale.
+Comparezo helps shoppers in India find the cheapest place to buy. One search shows a product's price on Meesho, Amazon.in, Flipkart, Myntra, JioMart, Snapdeal and others side by side. The cheapest store is worked out from what you actually pay: listed price plus delivery, minus coupons.
 
 The app has two tabs:
 
 - **Comparezo**: search, compare prices, buy where it's cheapest, and sell your own product.
-- **Linezo**: sales trends built from customer purchases. It shows units sold per day with a 7-day average, sales value, the stores people buy from, top categories and best sellers. You can filter by 7, 30 or 90 days and by category.
+- **Linezo**: the owner's sales tracker. It counts every "Buy" click: clicks per day with a 7-day average, the value of the clicked items, which stores and categories get the clicks, and the most clicked products. Confirmed orders and commission are in the Cuelinks dashboard. You can filter by 7, 30 or 90 days and by category.
 
 ## Run it
 
@@ -17,14 +17,14 @@ npm start          # http://localhost:3000
 npm test
 ```
 
-On first start the app creates `data/comparezo.db` and fills it with sample products, sample prices and 120 days of sample purchases, so Linezo has something to show. Delete the `data/` folder to start fresh. You can set `PORT` and `DATA_DIR` to change the port and data location.
+On first start the app creates `data/comparezo.db` with the categories, then loads the products in `server/catalog.json`. There is no sample data. Delete the `data/` folder to start fresh. You can set `PORT` and `DATA_DIR` to change the port and data location.
 
 ## How it fits together
 
 | Part | Where | What it does |
 | --- | --- | --- |
 | Server | `server/app.js` | JSON API built with Express |
-| Database | `server/db.js` | Tables: `products`, `offers` (one row per store price), `listings` (individual sellers), `purchases`, `categories` |
+| Database | `server/db.js` | Tables: `products`, `offers` (one row per store price), `purchases`, `categories` |
 | Cheapest price | `server/pricing.js` | You pay = price + delivery âˆ’ coupon. If two stores tie, the faster delivery wins. |
 | Linezo trends | `server/trends.js` | Daily units and revenue, change compared with the previous period, store and category share, best sellers |
 | Front end | `public/` | Plain HTML, CSS and JS with no build step. `#compare` and `#linezo` switch tabs. |
@@ -33,8 +33,7 @@ On first start the app creates `data/comparezo.db` and fills it with sample prod
 
 - `GET /api/products?q=&category=`: search products, each with its lowest price
 - `GET /api/products/:id?extras=1`: all store offers, the cheapest one, and how much you save
-- `GET /api/listings` and `POST /api/listings`: individual seller listings. Photos are sent as data URLs, up to 3 MB.
-- `POST /api/purchases` with `{offerId}` or `{listingId}`: records a purchase, which feeds Linezo
+- `POST /api/purchases` with `{offerId}`: records a Buy click, which feeds Linezo
 - `GET /api/trends?days=30&category=`: the data behind Linezo
 - `GET /api/categories`: the category tree, each category with its `subcategories`
 - `POST /api/categories` with `{name, parentId?}`, `PATCH /api/categories/:id` with `{name}` or `{move: "up"|"down"}`, and `DELETE /api/categories/:id`: edit categories. These need the `X-Admin-Key` header.
@@ -45,13 +44,13 @@ Categories and sub-categories are stored in the database, not in code, so they c
 
 Starting categories come in sets (`SETS` in `server/categories.js`). Each set is added once, the first time the app starts with it, and the `category_sets` table remembers which ones were added, so a category you delete doesn't come back. To add more starting categories, append a new set.
 
-To edit them, set an `ADMIN_KEY` environment variable on the server, open `/categories.html` (linked as "Manage categories" in the footer), and enter the key. You can add, rename, reorder and delete categories and sub-categories there. Renaming also updates existing products and listings. A category that is still used by a product or listing can't be deleted. Without `ADMIN_KEY`, editing is turned off.
+To edit them, set an `ADMIN_KEY` environment variable on the server, open `/categories.html` (linked as "Manage categories" in the footer), and enter the key. You can add, rename, reorder and delete categories and sub-categories there. Renaming also updates existing products. A category that is still used by a product can't be deleted. Without `ADMIN_KEY`, editing is turned off.
 
-Sellers pick a sub-category when the category has them, and a type when the sub-category has types. Shoppers can narrow search results by sub-category and type. Products and listings store these in `category`, `sub_category` and `type`.
+Products pick a sub-category when the category has them, and a type when the sub-category has types. Shoppers can narrow search results by sub-category and type. Products store these in `category`, `sub_category` and `type`.
 
 ## Getting real prices
 
-The prices in this app are sample data. Real prices need each store's official partner feed, for example the Amazon Associates Product Advertising API or the Flipkart Affiliate API. Copying prices off store websites is against most stores' terms. Each feed would write into the `offers` table. Each feed would also store the exact product link in `offers.url`.
+Prices come from products added by hand (see below) or from store feeds. Automatic prices need each store's official partner feed, for example the Amazon Associates Product Advertising API or the Flipkart Affiliate API. Copying prices off store websites is against most stores' terms. Each feed would write into the `offers` table. Each feed would also store the exact product link in `offers.url`.
 
 ## New arrivals from store feeds
 
@@ -79,6 +78,6 @@ Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard â†
 
 ## Buying
 
-"Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself. For an individual seller, "Contact seller" shows their name, city and phone so the buyer can deal with them directly.
+"Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself.
 
-For now, each of those clicks is counted as a purchase for Linezo. In production this should come from the affiliate network's order reports, so Linezo reflects real orders.
+Each of those clicks is counted in Linezo. On the free Render plan the click history is wiped when the server restarts. Confirmed orders come from Cuelinks' own reports.

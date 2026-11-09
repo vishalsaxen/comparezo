@@ -1,4 +1,4 @@
-// Comparezo front end: two tabs, Comparezo (compare + sell) and Linezo (sales trends).
+// Comparezo front end: two tabs, Comparezo (compare prices) and Linezo (your sales tracker).
 (() => {
 const STORE_COLORS = {
   'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c',
@@ -49,7 +49,6 @@ function route() {
   $('tab-linezo').setAttribute('aria-selected', tab === 'linezo');
   document.title = tab === 'linezo' ? 'Linezo · Comparezo' : 'Comparezo';
   if (tab === 'linezo' && !linezoLoaded) { linezoLoaded = true; loadTrends(); }
-  if (location.hash === '#sell' || location.hash === '#community') document.querySelector(location.hash)?.scrollIntoView();
 }
 window.addEventListener('hashchange', route);
 
@@ -71,7 +70,7 @@ function renderResults() {
   const list = state.products;
   $('results').innerHTML = `<div class="results-head"><strong>${list.length} product${list.length === 1 ? '' : 's'}</strong><span class="sub">${state.q ? 'for “' + esc(state.q) + '”' : esc(state.cat ? catLabel(state.cat, state.sub, state.type) : 'Popular today')}</span></div>` +
     (list.length ? list.map(p => `<button class="ritem" data-id="${p.id}" aria-current="${p.id === state.sel}">${thumb(p.category, p.image)}<div><div class="t">${esc(p.name)}</div><div class="sub">From <span class="from num">${inr(p.lowest)}</span> · ${p.storeCount} stores</div></div></button>`).join('')
-      : '<div class="empty">No products match. Try “earbuds”, “kurta” or “cooker”.</div>');
+      : `<div class="empty">${state.q || state.cat ? 'No products match. Try another word or category.' : 'No products yet.'}</div>`);
 }
 async function loadDetail() {
   if (!state.sel) { $('detail').innerHTML = '<div class="empty">Pick a product to see prices.</div>'; return; }
@@ -114,15 +113,7 @@ function renderDetail() {
           <td>${r.buyUrl ? `<a class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" href="${esc(r.buyUrl)}" target="_blank" rel="noopener noreferrer sponsored" data-buy-offer="${r.id}" data-store="${esc(r.store)}">Buy on ${esc(r.store)} ↗</a>` : '<span class="sub">No link yet</span>'}</td>
         </tr>`; }).join('')}
       </tbody></table></div>
-    <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices are sample data until store feeds are connected.</p>
-    ${d.localListings.length ? `<div class="locals"><h3>Also from individual sellers in ${esc(p.category)}</h3>${d.localListings.map(l => `
-      <div class="local-row"><div><strong>${esc(l.title)}</strong><div class="sub">${esc(l.seller_name)} · ${esc(l.city)} · ${esc(l.condition)}</div></div>
-      <div style="display:flex;gap:10px;align-items:center"><span class="num eff">${inr(l.price)}</span><button class="btn btn-ghost go" data-contact-listing="${l.id}" aria-expanded="false">Contact seller</button></div>
-      <div class="contact" id="contact-${l.id}" hidden>
-        <div><strong>${esc(l.seller_name)}</strong> · ${esc(l.city)}</div>
-        ${l.phone ? `<div>Call or WhatsApp: <span class="num" style="user-select:all">${esc(l.phone)}</span></div>` : '<div class="sub">This seller hasn\'t added a phone number yet.</div>'}
-        <div class="sub">Agree the price and delivery directly with the seller. Pay only after you've seen the product.</div>
-      </div></div>`).join('')}</div>` : ''}`;
+    <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices can change on the store; check the final price there.</p>`;
 }
 
 $('searchForm').addEventListener('submit', e => { e.preventDefault(); state.q = $('q').value.trim(); loadProducts(); });
@@ -144,14 +135,6 @@ $('detail').addEventListener('click', async e => {
     toast(`Opening ${a.dataset.store} in a new tab.`);
     return;
   }
-  const c = e.target.closest('[data-contact-listing]');
-  if (!c) return;
-  const box = $('contact-' + c.dataset.contactListing);
-  const opening = box.hidden;
-  box.hidden = !opening;
-  c.setAttribute('aria-expanded', opening);
-  c.textContent = opening ? 'Hide contact' : 'Contact seller';
-  if (opening && !c.dataset.counted) { c.dataset.counted = '1'; recordPurchase({ listingId: Number(c.dataset.contactListing) }); }
 });
 function recordPurchase(body) {
   fetch('/api/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true })
@@ -159,22 +142,6 @@ function recordPurchase(body) {
 }
 $('detail').addEventListener('change', e => { if (e.target.id === 'extras') { state.extras = e.target.checked; loadDetail(); } });
 
-/* ---------- Comparezo: sell ---------- */
-let photo = null;
-function cardHTML(l) {
-  const c = catStyle(l.category);
-  const img = l.photoUrl ? `<div class="img" style="background-image:url('${esc(l.photoUrl)}')"></div>` : `<div class="img" style="background:${c.c}"><svg viewBox="0 0 24 24" aria-hidden="true">${c.i}</svg></div>`;
-  return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(l.price || 0)}</div><div class="t">${esc(l.title || 'Your product name')}</div><div class="sub">${esc(l.city || 'Your city')} · ${esc(l.seller_name || 'You')}</div><div class="row"><span class="cond">${esc(l.condition)}</span><span class="sub">${esc(l.type || l.sub_category || l.category)}</span></div></div></article>`;
-}
-function readForm() {
-  return { title: $('s-title').value.trim(), category: $('s-cat').value, subCategory: $('s-sub').value, type: $('s-type').value, condition: $('s-cond').value, price: Number($('s-price').value),
-    city: $('s-city').value.trim(), sellerName: $('s-name').value.trim(), phone: $('s-phone').value.trim(), description: $('s-desc').value.trim(), photo };
-}
-function updatePreview() { const f = readForm(); $('preview').innerHTML = cardHTML({ ...f, seller_name: f.sellerName, sub_category: f.subCategory, type: f.type, photoUrl: photo }); }
-async function loadListings() {
-  const list = await api('/api/listings');
-  $('lgrid').innerHTML = list.length ? list.map(l => cardHTML({ ...l, photoUrl: l.photo ? '/uploads/' + l.photo : null })).join('') : '<p class="sub">No listings yet. Be the first.</p>';
-}
 /* ---------- Comparezo: new arrivals from store feeds ---------- */
 async function loadNewArrivals() {
   const [data, feeds] = await Promise.all([api('/api/new-arrivals?days=20'), api('/api/feeds')]);
@@ -187,38 +154,10 @@ async function loadNewArrivals() {
     const img = p.image ? `<div class="img" style="background-image:url('${esc(p.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : `<div class="img" style="background:${c.c}"><svg viewBox="0 0 24 24" aria-hidden="true">${c.i}</svg></div>`;
     const link = p.url ? `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener sponsored">View on ${esc(p.store)}</a>` : '';
     return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(p.price)}</div><div class="t">${esc(p.name)}</div><div class="sub">${sdot(p.store)}${esc(p.store)} · ${ago(p.arrived_at)}</div><div class="row"><span class="sub">${esc(catLabel(p.category, p.sub_category))}</span>${link}</div></div></article>`;
-  }).join('') || (feeds.connected.length ? '<p class="sub">Nothing new in the last 20 days yet. Feeds refresh every few hours.</p>' : '');
+  }).join('');
+  // Only show the section once a store feed is connected and has something new.
+  $('new').hidden = !data.items.length;
 }
-function loadPhoto(f) {
-  if (!f) return;
-  if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { $('sellStatus').className = 'err'; $('sellStatus').textContent = 'Photo must be a JPG, PNG or WebP image.'; return; }
-  if (f.size > 3 * 1024 * 1024) { $('sellStatus').className = 'err'; $('sellStatus').textContent = 'Photo must be under 3 MB.'; return; }
-  const r = new FileReader();
-  r.onload = () => { photo = r.result; $('drop').querySelector('strong').textContent = 'Photo added: ' + f.name; updatePreview(); };
-  r.readAsDataURL(f);
-}
-$('sellForm').addEventListener('input', updatePreview);
-$('sellForm').addEventListener('change', updatePreview);
-$('s-photo').addEventListener('change', e => loadPhoto(e.target.files[0]));
-const drop = $('drop');
-['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => loadPhoto(e.dataTransfer.files[0]));
-$('sellForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const status = $('sellStatus'), btn = e.submitter;
-  btn.disabled = true;
-  try {
-    await api('/api/listings', { body: readForm() });
-    status.className = 'ok'; status.textContent = 'Published. Your listing is now live under Local listings.';
-    e.target.reset(); fillSubSelect(); photo = null; drop.querySelector('strong').textContent = 'Drop a photo here'; updatePreview();
-    loadListings(); loadDetail();
-  } catch (err) {
-    status.className = 'err'; status.textContent = (err.data && err.data.errors || [err.message]).join(' ');
-  }
-  btn.disabled = false;
-});
-
 /* ---------- Linezo: trends ---------- */
 const lz = { days: 30, category: '' };
 async function loadTrends() {
@@ -236,10 +175,10 @@ function delta(v) {
 function renderKpis(t) {
   const best = t.byStore[0];
   $('lzKpis').innerHTML = `
-    <div class="kpi"><div class="eyebrow">Units sold</div><div class="v num">${t.totals.units.toLocaleString('en-IN')}</div>${delta(t.totals.unitsChangePct)}</div>
-    <div class="kpi"><div class="eyebrow">Sales value</div><div class="v num">${inr(t.totals.revenue)}</div>${delta(t.totals.revenueChangePct)}</div>
-    <div class="kpi"><div class="eyebrow">Average order</div><div class="v num">${inr(t.totals.avgOrder)}</div><span class="sub">per unit</span></div>
-    <div class="kpi"><div class="eyebrow">Top store</div><div class="v" style="font-size:22px;display:flex;align-items:center">${best ? sdot(best.store) + esc(best.store) : '–'}</div><span class="sub">${best && t.totals.units ? Math.round(best.units / t.totals.units * 100) + '% of units' : ''}</span></div>`;
+    <div class="kpi"><div class="eyebrow">Buy clicks</div><div class="v num">${t.totals.units.toLocaleString('en-IN')}</div>${delta(t.totals.unitsChangePct)}</div>
+    <div class="kpi"><div class="eyebrow">Value of clicked items</div><div class="v num">${inr(t.totals.revenue)}</div>${delta(t.totals.revenueChangePct)}</div>
+    <div class="kpi"><div class="eyebrow">Average item</div><div class="v num">${inr(t.totals.avgOrder)}</div><span class="sub">per click</span></div>
+    <div class="kpi"><div class="eyebrow">Top store</div><div class="v" style="font-size:22px;display:flex;align-items:center">${best ? sdot(best.store) + esc(best.store) : '–'}</div><span class="sub">${best && t.totals.units ? Math.round(best.units / t.totals.units * 100) + '% of clicks' : ''}</span></div>`;
   $('lzRangeLbl').textContent = `${fmtDay(t.from)} to ${fmtDay(t.to)}${t.category ? ' · ' + t.category : ''}`;
 }
 function fmtDay(s) { return new Date(s + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }); }
@@ -255,7 +194,7 @@ function renderChart(t) {
   const units = data.map(d => d.units);
   const ticks = [0, 1, 2, 3, 4, 5].map(k => (k * max) / 5);
   const step = Math.ceil(data.length / 6);
-  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Units sold per day, ${fmtDay(t.from)} to ${fmtDay(t.to)}">
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Buy clicks per day, ${fmtDay(t.from)} to ${fmtDay(t.to)}">
     ${ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`).join('')}
     ${data.map((d, i) => i % step === 0 || i === data.length - 1 ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${fmtDay(d.day)}</text>` : '').join('')}
     <path d="${line(units)} L${x(data.length - 1)} ${y(0)} L${x(0)} ${y(0)}Z" fill="var(--brand-soft)"/>
@@ -264,28 +203,28 @@ function renderChart(t) {
     <circle cx="${x(data.length - 1)}" cy="${y(avg[avg.length - 1])}" r="5" fill="var(--marigold)"/>
     <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" id="lzHit"/>
   </svg><div class="tip" hidden></div>
-  <div class="sub" style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap"><span><span class="sdot" style="background:var(--brand)"></span>Daily units</span><span><span class="sdot" style="background:var(--marigold)"></span>7-day average</span></div>`;
+  <div class="sub" style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap"><span><span class="sdot" style="background:var(--brand)"></span>Daily clicks</span><span><span class="sdot" style="background:var(--marigold)"></span>7-day average</span></div>`;
   $('lzChart').innerHTML = svg;
   const hit = $('lzChart').querySelector('#lzHit'), tip = $('lzChart').querySelector('.tip'), el = $('lzChart').querySelector('svg');
   hit.addEventListener('mousemove', e => {
     const rect = el.getBoundingClientRect(), sx = (e.clientX - rect.left) * W / rect.width;
     const i = Math.max(0, Math.min(data.length - 1, Math.round((sx - L) / ((W - L - R) / Math.max(1, data.length - 1)))));
     tip.hidden = false; tip.style.left = (x(i) * rect.width / W) + 'px'; tip.style.top = (y(units[i]) * rect.height / H) + 'px';
-    tip.textContent = `${fmtDay(data[i].day)}: ${units[i]} units · ${inr(data[i].revenue)}`;
+    tip.textContent = `${fmtDay(data[i].day)}: ${units[i]} clicks · ${inr(data[i].revenue)}`;
   });
   hit.addEventListener('mouseleave', () => (tip.hidden = true));
 }
 function bars(rows, key, label) {
   const total = rows.reduce((a, r) => a + r.units, 0) || 1, max = Math.max(1, ...rows.map(r => r.units));
-  return rows.map(r => `<div class="bar-row"><div class="name">${label(r)}</div><div class="bar"><span style="width:${(r.units / max * 100).toFixed(1)}%"></span></div><div class="num r">${Math.round(r.units / total * 100)}%</div></div>`).join('') || '<p class="sub">No sales in this range yet.</p>';
+  return rows.map(r => `<div class="bar-row"><div class="name">${label(r)}</div><div class="bar"><span style="width:${(r.units / max * 100).toFixed(1)}%"></span></div><div class="num r">${Math.round(r.units / total * 100)}%</div></div>`).join('') || '<p class="sub">No Buy clicks in this range yet.</p>';
 }
 function renderBars(t) {
   $('lzStores').innerHTML = bars(t.byStore, 'store', r => sdot(r.store) + esc(r.store));
   $('lzCats').innerHTML = bars(t.byCategory, 'category', r => esc(r.category));
 }
 function renderTop(t) {
-  $('lzTop').innerHTML = t.topProducts.map((p, i) => `<tr><td class="num">${i + 1}</td><td><strong>${esc(p.name)}</strong>${p.individual ? ' <span class="tag tag-fast">Individual seller</span>' : ''}</td><td>${esc(p.category)}</td><td class="r num">${p.units.toLocaleString('en-IN')}</td><td class="r num">${inr(p.revenue)}</td></tr>`).join('')
-    || '<tr><td colspan="5" class="sub">No sales in this range yet.</td></tr>';
+  $('lzTop').innerHTML = t.topProducts.map((p, i) => `<tr><td class="num">${i + 1}</td><td><strong>${esc(p.name)}</strong></td><td>${esc(p.category)}</td><td class="r num">${p.units.toLocaleString('en-IN')}</td><td class="r num">${inr(p.revenue)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="sub">No Buy clicks in this range yet.</td></tr>';
 }
 $('lzRange').addEventListener('click', e => { const b = e.target.closest('[data-days]'); if (b) { lz.days = Number(b.dataset.days); loadTrends(); } });
 $('lzCat').addEventListener('change', e => { lz.category = e.target.value; loadTrends(); });
@@ -305,19 +244,6 @@ function renderCatChips() {
   chipRow('subcats', state.cat || '', state.cat ? subNames(state.cat) : [], 'sub', state.sub);
   chipRow('typecats', state.sub || '', state.sub ? typesOf(state.cat, state.sub) : [], 'type', state.type);
 }
-function fillTypeSelect(keep) {
-  const types = typesOf($('s-cat').value, $('s-sub').value);
-  $('s-type-field').hidden = !types.length;
-  $('s-type').innerHTML = types.length ? opt('', 'Select type') + types.map(t => opt(t)).join('') : opt('', 'None');
-  if (keep && types.includes(keep)) $('s-type').value = keep;
-}
-function fillSubSelect(keep, keepType) {
-  const subs = subNames($('s-cat').value);
-  $('s-sub').innerHTML = subs.length ? opt('', 'Select sub-category') + subs.map(s => opt(s)).join('') : opt('', 'None');
-  $('s-sub').disabled = !subs.length;
-  if (keep && subs.includes(keep)) $('s-sub').value = keep;
-  fillTypeSelect(keepType);
-}
 async function loadCategories() {
   const fresh = await api('/api/categories');
   if (JSON.stringify(fresh) === JSON.stringify(categories)) return false;
@@ -327,10 +253,6 @@ async function loadCategories() {
   if (state.sub && !subNames(state.cat).includes(state.sub)) state.sub = null;
   if (state.type && !typesOf(state.cat, state.sub).includes(state.type)) state.type = null;
   renderCatChips();
-  const cat = $('s-cat').value, sub = $('s-sub').value, type = $('s-type').value;
-  $('s-cat').innerHTML = categories.map(c => opt(c.name)).join('');
-  if (categories.some(c => c.name === cat)) $('s-cat').value = cat;
-  fillSubSelect(sub, type);
   const lzc = $('lzCat').value;
   $('lzCat').innerHTML = opt('', 'All categories') + categories.map(c => opt(c.name)).join('');
   if (categories.some(c => c.name === lzc)) $('lzCat').value = lzc; else lz.category = '';
@@ -356,16 +278,13 @@ $('typecats').addEventListener('click', e => {
   renderCatChips();
   loadProducts();
 });
-$('s-cat').addEventListener('change', () => fillSubSelect());
-$('s-sub').addEventListener('change', () => fillTypeSelect());
 // Pick up category changes made elsewhere without a page reload.
-window.addEventListener('focus', () => loadCategories().then(changed => { if (changed) { updatePreview(); loadProducts(); } }).catch(() => {}));
+window.addEventListener('focus', () => loadCategories().then(changed => { if (changed) loadProducts(); }).catch(() => {}));
 
 /* ---------- Boot ---------- */
 (async () => {
   await loadCategories();
-  updatePreview();
   route();
-  await Promise.all([loadProducts(), loadListings(), loadNewArrivals().catch(() => {})]);
+  await Promise.all([loadProducts(), loadNewArrivals().catch(() => {})]);
 })().catch(err => { $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`; });
 })();

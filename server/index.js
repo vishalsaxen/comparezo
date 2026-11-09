@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 
 const db = openDb(path.join(DATA_DIR, 'comparezo.db'));
-if (seed(db)) console.log('Seeded sample products, listings and purchase history.');
+seed(db);
 const catalog = loadCatalog(db);
 if (catalog.added) console.log(`Loaded ${catalog.added} products from catalog.json.`);
 for (const p of catalog.problems) console.warn(`catalog.json: ${p}`);

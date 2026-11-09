@@ -19,7 +19,6 @@
       <a role="tab" id="tab-compare" href="#compare" aria-controls="view-compare">Comparezo</a>
       <a role="tab" id="tab-linezo" href="#linezo" aria-controls="view-linezo">Linezo</a>
     </nav>
-    <a class="btn btn-brand sell-cta" href="#sell">Sell a product</a>
   </div>
 </header>
 
@@ -44,56 +43,13 @@
       <div class="panel detail" id="detail"></div>
     </section>
 
-    <section class="sell" id="sell">
-      <div class="wrap sell-inner">
-        <div class="eyebrow">For individual sellers</div>
-        <h2>List your own product in two minutes</h2>
-        <p class="lede">No shop needed. Add a photo, set your price, and buyers searching for the same kind of item see your listing next to the big stores.</p>
-        <div class="sell-grid">
-          <form class="panel sell-form" id="sellForm" novalidate>
-            <div class="field full"><label for="s-title">Product name</label><input id="s-title" maxlength="80" placeholder="e.g. Handmade cotton kurta, size M"></div>
-            <div class="field"><label for="s-cat">Category</label><select id="s-cat"></select></div>
-            <div class="field"><label for="s-sub">Sub-category</label><select id="s-sub"></select></div>
-            <div class="field" id="s-type-field" hidden><label for="s-type">Type</label><select id="s-type"></select></div>
-            <div class="field"><label for="s-cond">Condition</label>
-              <select id="s-cond"><option>New</option><option>Handmade</option><option>Like new</option><option>Used, good</option></select></div>
-            <div class="field"><label for="s-price">Your price (₹)</label><input id="s-price" type="number" min="1" inputmode="numeric"></div>
-            <div class="field"><label for="s-city">City / PIN code</label><input id="s-city" placeholder="e.g. Jaipur 302001"></div>
-            <div class="field full"><label for="s-desc">Description</label><textarea id="s-desc" maxlength="300"></textarea></div>
-            <div class="field full">
-              <span class="label">Photo</span>
-              <label class="drop" id="drop" for="s-photo">
-                <input id="s-photo" type="file" accept="image/png,image/jpeg,image/webp">
-                <strong>Drop a photo here</strong> or click to choose<br><span class="hint">JPG, PNG or WebP, up to 3 MB.</span>
-              </label>
-            </div>
-            <div class="field"><label for="s-name">Your name</label><input id="s-name"></div>
-            <div class="field"><label for="s-phone">Phone (shown to buyers)</label><input id="s-phone" inputmode="tel"></div>
-            <div class="form-actions">
-              <button class="btn btn-brand" type="submit">Publish listing</button>
-              <span id="sellStatus" role="status"></span>
-            </div>
-          </form>
-          <div>
-            <div class="eyebrow">Live preview</div>
-            <div id="preview"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="community wrap" id="new">
+    <section class="community wrap" id="new" hidden>
       <div class="eyebrow">Straight from the stores</div>
       <h2>New arrivals, last 20 days</h2>
       <p class="sub" id="newNote"></p>
       <div class="lgrid" id="newGrid"></div>
     </section>
 
-    <section class="community wrap" id="community">
-      <div class="eyebrow">From individual sellers</div>
-      <h2>Local listings</h2>
-      <div class="lgrid" id="lgrid"></div>
-    </section>
   </div>
 
   <!-- Linezo tab -->
@@ -102,8 +58,8 @@
       <div class="lz-head">
         <div>
           <div class="eyebrow">Linezo</div>
-          <h1 class="lz-title">What shoppers are buying</h1>
-          <p class="lede">Sales trends from purchases made through Comparezo, across every store and individual seller.</p>
+          <h1 class="lz-title">Your sales tracker</h1>
+          <p class="lede">Every time a shopper clicks “Buy” on Comparezo, it's counted here: which products, which stores and how much they were worth. Your confirmed orders and commission are in your <a href="https://www.cuelinks.com/" target="_blank" rel="noopener">Cuelinks dashboard</a>.</p>
         </div>
         <div class="lz-controls">
           <div class="seg" role="group" aria-label="Time range" id="lzRange">
@@ -114,21 +70,21 @@
       </div>
       <div class="kpis" id="lzKpis"></div>
       <div class="panel chart-panel">
-        <div class="chart-head"><h2>Units sold per day</h2><span class="sub" id="lzRangeLbl"></span></div>
+        <div class="chart-head"><h2>Buy clicks per day</h2><span class="sub" id="lzRangeLbl"></span></div>
         <div id="lzChart" class="chart"></div>
       </div>
       <div class="lz-grid">
-        <div class="panel pad"><h2>Where people buy</h2><p class="sub">Share of units by store</p><div id="lzStores"></div></div>
-        <div class="panel pad"><h2>Top categories</h2><p class="sub">Units sold</p><div id="lzCats"></div></div>
+        <div class="panel pad"><h2>Where people buy</h2><p class="sub">Share of Buy clicks by store</p><div id="lzStores"></div></div>
+        <div class="panel pad"><h2>Top categories</h2><p class="sub">Buy clicks</p><div id="lzCats"></div></div>
       </div>
       <div class="panel pad">
-        <h2>Best sellers</h2>
-        <div class="tablebox"><table class="top-table"><thead><tr><th>#</th><th>Product</th><th>Category</th><th class="r">Units</th><th class="r">Revenue</th></tr></thead><tbody id="lzTop"></tbody></table></div>
+        <h2>Most clicked products</h2>
+        <div class="tablebox"><table class="top-table"><thead><tr><th>#</th><th>Product</th><th>Category</th><th class="r">Clicks</th><th class="r">Value</th></tr></thead><tbody id="lzTop"></tbody></table></div>
       </div>
     </section>
   </div>
 </main>
-<footer><div class="wrap foot">Comparezo. Prices shown are sample data until store price feeds are connected. Comparezo may earn a commission when you buy through store links, at no extra cost to you. · <a href="/categories.html">Manage categories</a> · <a href="/products.html">Add products</a></div></footer>
+<footer><div class="wrap foot">Comparezo. Comparezo may earn a commission when you buy through store links, at no extra cost to you. · <a href="/categories.html">Manage categories</a> · <a href="/products.html">Add products</a></div></footer>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/app.js"></script>
 <script src="/affiliate.js" defer></script>

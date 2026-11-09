@@ -9,8 +9,6 @@ const cats = require('./categories');
 const feeds = require('./feeds');
 const { addProduct } = require('./catalog');
 
-const CONDITIONS = ['New', 'Handmade', 'Like new', 'Used, good'];
-const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
 function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db) }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -93,52 +91,10 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
     comparison.offers.forEach(o => { o.buyUrl = buyUrl(o, p.name); });
-    // Listings in the same category, with the same sub-category first.
-    const localListings = db.prepare(`SELECT * FROM listings WHERE category = ?
-      ORDER BY (sub_category IS ?) DESC, created_at DESC, id DESC LIMIT 3`).all(p.category, p.sub_category);
-    res.json({ product: p, ...comparison, includeExtras, localListings });
+    res.json({ product: p, ...comparison, includeExtras });
   });
 
-  app.get('/api/listings', (_req, res) => {
-    res.json(db.prepare('SELECT * FROM listings ORDER BY created_at DESC, id DESC LIMIT 60').all());
-  });
-
-  app.post('/api/listings', (req, res) => {
-    const b = req.body || {};
-    const errors = [];
-    const title = String(b.title || '').trim().slice(0, 80);
-    const city = String(b.city || '').trim().slice(0, 60);
-    const seller = String(b.sellerName || '').trim().slice(0, 60);
-    const price = Math.round(Number(b.price));
-    if (!title) errors.push('Add a product name.');
-    const subCategory = String(b.subCategory || '').trim() || null;
-    const type = String(b.type || '').trim() || null;
-    const catError = cats.checkPath(db, b.category, subCategory, type);
-    if (catError) errors.push(catError);
-    if (!CONDITIONS.includes(b.condition)) errors.push('Pick a condition.');
-    if (!Number.isFinite(price) || price < 1 || price > 10000000) errors.push('Set a price above ₹0.');
-    if (!city) errors.push('Add your city or PIN code.');
-    if (!seller) errors.push('Add your name.');
-
-    let photo = null;
-    if (b.photo) {
-      const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/.exec(String(b.photo));
-      if (!m) errors.push('Photo must be a JPG, PNG or WebP image.');
-      else {
-        const buf = Buffer.from(m[2], 'base64');
-        if (buf.length > MAX_PHOTO_BYTES) errors.push('Photo must be under 3 MB.');
-        else { photo = `${crypto.randomUUID()}.${m[1] === 'jpeg' ? 'jpg' : m[1]}`; fs.writeFileSync(path.join(uploadsDir, photo), buf); }
-      }
-    }
-    if (errors.length) return res.status(400).json({ errors });
-
-    const r = db.prepare(`INSERT INTO listings (title, category, sub_category, type, condition, price, city, seller_name, phone, description, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, b.category, subCategory, type, b.condition, price, city, seller,
-      String(b.phone || '').slice(0, 20), String(b.description || '').slice(0, 300), photo);
-    res.status(201).json(db.prepare('SELECT * FROM listings WHERE id = ?').get(Number(r.lastInsertRowid)));
-  });
-
-  // Record a purchase (or a click-through to buy). This is what feeds Linezo.
+  // Record a Buy click (the shopper is sent to the store). This is what Linezo tracks.
   app.post('/api/purchases', (req, res) => {
     const b = req.body || {};
     const quantity = Math.min(Math.max(parseInt(b.quantity, 10) || 1, 1), 50);
@@ -149,13 +105,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
       db.prepare('INSERT INTO purchases (product_id, store, category, amount, quantity) VALUES (?, ?, ?, ?, ?)').run(o.product_id, o.store, o.category, amount, quantity);
       return res.status(201).json({ ok: true, store: o.store, amount });
     }
-    if (b.listingId) {
-      const l = db.prepare('SELECT * FROM listings WHERE id = ?').get(Number(b.listingId));
-      if (!l) return res.status(404).json({ error: 'Listing not found' });
-      db.prepare('INSERT INTO purchases (listing_id, store, category, amount, quantity) VALUES (?, ?, ?, ?, ?)').run(l.id, 'Individual seller', l.category, l.price, quantity);
-      return res.status(201).json({ ok: true, store: 'Individual seller', amount: l.price });
-    }
-    res.status(400).json({ error: 'Send an offerId or listingId.' });
+    res.status(400).json({ error: 'Send an offerId.' });
   });
 
   // Products the site owner adds by hand: pick a product on a store, paste its link and price.
