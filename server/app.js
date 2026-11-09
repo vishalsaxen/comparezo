@@ -58,11 +58,13 @@ function createApp(db, { uploadsDir, adminKey = '', feedRunner = feeds.createFee
     const q = String(req.query.q || '').trim();
     const cat = cats.findTop(db, req.query.category) ? req.query.category : null;
     const sub = cat && req.query.sub ? String(req.query.sub) : null;
+    const type = sub && req.query.type ? String(req.query.type) : null;
     let sql = 'SELECT * FROM products WHERE 1=1';
     const args = [];
-    if (q) { sql += ' AND (name LIKE ? OR spec LIKE ? OR category LIKE ? OR sub_category LIKE ?)'; const like = `%${q}%`; args.push(like, like, like, like); }
+    if (q) { sql += ' AND (name LIKE ? OR spec LIKE ? OR category LIKE ? OR sub_category LIKE ? OR type LIKE ?)'; const like = `%${q}%`; args.push(like, like, like, like, like); }
     if (cat) { sql += ' AND category = ?'; args.push(cat); }
     if (sub) { sql += ' AND sub_category = ?'; args.push(sub); }
+    if (type) { sql += ' AND type = ?'; args.push(type); }
     const rows = db.prepare(sql + ' ORDER BY id').all(...args).map(p => {
       const c = compareOffers(offersFor.all(p.id));
       return { ...p, storeCount: c.offers.length, lowest: c.cheapest ? c.cheapest.effective : null };
@@ -95,7 +97,8 @@ function createApp(db, { uploadsDir, adminKey = '', feedRunner = feeds.createFee
     const price = Math.round(Number(b.price));
     if (!title) errors.push('Add a product name.');
     const subCategory = String(b.subCategory || '').trim() || null;
-    const catError = cats.checkPair(db, b.category, subCategory);
+    const type = String(b.type || '').trim() || null;
+    const catError = cats.checkPath(db, b.category, subCategory, type);
     if (catError) errors.push(catError);
     if (!CONDITIONS.includes(b.condition)) errors.push('Pick a condition.');
     if (!Number.isFinite(price) || price < 1 || price > 10000000) errors.push('Set a price above ₹0.');
@@ -114,8 +117,8 @@ function createApp(db, { uploadsDir, adminKey = '', feedRunner = feeds.createFee
     }
     if (errors.length) return res.status(400).json({ errors });
 
-    const r = db.prepare(`INSERT INTO listings (title, category, sub_category, condition, price, city, seller_name, phone, description, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, b.category, subCategory, b.condition, price, city, seller,
+    const r = db.prepare(`INSERT INTO listings (title, category, sub_category, type, condition, price, city, seller_name, phone, description, photo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, b.category, subCategory, type, b.condition, price, city, seller,
       String(b.phone || '').slice(0, 20), String(b.description || '').slice(0, 300), photo);
     res.status(201).json(db.prepare('SELECT * FROM listings WHERE id = ?').get(Number(r.lastInsertRowid)));
   });

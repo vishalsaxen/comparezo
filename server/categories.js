@@ -1,7 +1,7 @@
 // Categories and sub-categories live in the database, so they can be added,
 // renamed, reordered or removed while the app is running (see /categories.html).
-// The structure follows giazonest: a category holds a list of sub-categories,
-// and "Other" always sorts last.
+// The structure follows GiaZoNest: a category holds sub-categories, a sub-category can
+// hold types (sub-sub-categories), and "Other" always sorts last.
 
 const STARTER = [
   ['Fashion & Clothing', ["Men's Wear", "Women's Wear", "Kids' Wear", 'Footwear', 'Bags & Accessories', 'Leather', 'Other']],
@@ -16,7 +16,7 @@ const STARTER = [
 // with it; deleting a category afterwards doesn't bring it back. To add more, append a new set.
 const SETS = [
   ['starter', STARTER],
-  ['medical-billing-system', require('./category-sets/medical')],
+  ['giazonest', require('./category-sets/giazonest')],
 ];
 
 const MAX_NAME = 40;
@@ -47,7 +47,11 @@ function seedCategories(db) {
       for (const [name, subs] of list) {
         // A category that already exists keeps its place and gains any missing sub-categories.
         const id = findTopId.get(name)?.id ?? Number(ins.run(name, null, nextPos.get(0).p).lastInsertRowid);
-        for (const sub of subs) if (!findSub.get(id, sub)) ins.run(sub, id, nextPos.get(id).p);
+        for (const entry of subs) {
+          const [sub, types = []] = Array.isArray(entry) ? entry : [entry];
+          const subId = findSub.get(id, sub)?.id ?? Number(ins.run(sub, id, nextPos.get(id).p).lastInsertRowid);
+          for (const type of types) if (!findSub.get(subId, type)) ins.run(type, subId, nextPos.get(subId).p);
+        }
       }
       db.prepare('INSERT INTO category_sets (name) VALUES (?)').run(setName);
     }
@@ -60,26 +64,55 @@ function seedCategories(db) {
 
 const ORDER = "ORDER BY (name = 'Other'), position, id";
 
-// [{ id, name, subcategories: [{ id, name }] }]
+// [{ id, name, subcategories: [{ id, name, types: [{ id, name }] }] }]
 function categoryTree(db) {
-  const subs = db.prepare(`SELECT id, name, parent_id FROM categories WHERE parent_id IS NOT NULL ${ORDER}`).all();
+  const kids = new Map();
+  for (const r of db.prepare(`SELECT id, name, parent_id FROM categories WHERE parent_id IS NOT NULL ${ORDER}`).all()) {
+    if (!kids.has(r.parent_id)) kids.set(r.parent_id, []);
+    kids.get(r.parent_id).push(r);
+  }
+  const of = id => kids.get(id) || [];
   return db.prepare(`SELECT id, name FROM categories WHERE parent_id IS NULL ${ORDER}`).all().map(c => ({
     id: c.id, name: c.name,
-    subcategories: subs.filter(s => s.parent_id === c.id).map(s => ({ id: s.id, name: s.name })),
+    subcategories: of(c.id).map(s => ({ id: s.id, name: s.name, types: of(s.id).map(t => ({ id: t.id, name: t.name })) })),
   }));
+}
+
+// How deep a category is: 0 = category, 1 = sub-category, 2 = type.
+function depthOf(db, c) {
+  let d = 0;
+  while (c.parent_id != null) { c = getOne(db, c.parent_id); d++; }
+  return d;
+}
+
+// The names along a category's path, e.g. ['School & Education', 'Music', 'Sitar'].
+function pathOf(db, c) {
+  const names = [c.name];
+  while (c.parent_id != null) { c = getOne(db, c.parent_id); names.unshift(c.name); }
+  return names;
+}
+
+const LEVEL_COLS = ['category', 'sub_category', 'type'];
+// SQL condition and arguments matching rows filed under this path (or anywhere below it).
+function whereUnder(names) {
+  return { sql: names.map((_, i) => `${LEVEL_COLS[i]} = ?`).join(' AND '), args: names };
 }
 
 function findTop(db, name) {
   return name ? db.prepare('SELECT * FROM categories WHERE parent_id IS NULL AND name = ?').get(String(name)) : undefined;
 }
 
-// Checks a category / sub-category pair sent by a seller. Returns an error message, or null when it is valid.
-function checkPair(db, category, subCategory) {
+// Checks the category / sub-category / type a seller sent. Returns an error message, or null when it is valid.
+function checkPath(db, category, subCategory, type) {
   const top = findTop(db, category);
   if (!top) return 'Pick a category.';
-  const subs = db.prepare('SELECT name FROM categories WHERE parent_id = ?').all(top.id).map(s => s.name);
-  if (subs.length && !subs.includes(subCategory)) return 'Pick a sub-category.';
-  if (!subs.length && subCategory) return 'This category has no sub-categories.';
+  const childOf = (id, name) => db.prepare('SELECT * FROM categories WHERE parent_id = ? AND name = ?').get(id, name);
+  const hasKids = id => db.prepare('SELECT 1 FROM categories WHERE parent_id = ? LIMIT 1').get(id);
+  if (!hasKids(top.id)) return subCategory || type ? 'This category has no sub-categories.' : null;
+  const sub = subCategory && childOf(top.id, subCategory);
+  if (!sub) return 'Pick a sub-category.';
+  if (!hasKids(sub.id)) return type ? 'This sub-category has no types.' : null;
+  if (!type || !childOf(sub.id, type)) return 'Pick a type.';
   return null;
 }
 
@@ -99,14 +132,14 @@ function getOne(db, id) {
 function assertUnique(db, name, parentId, exceptId = 0) {
   const clash = db.prepare('SELECT id FROM categories WHERE COALESCE(parent_id, 0) = ? AND name = ? COLLATE NOCASE AND id != ?')
     .get(parentId || 0, name, exceptId);
-  if (clash) throw new CategoryError(409, parentId ? `"${name}" is already a sub-category here.` : `"${name}" is already a category.`);
+  if (clash) throw new CategoryError(409, parentId ? `"${name}" is already listed here.` : `"${name}" is already a category.`);
 }
 
 function addCategory(db, { name, parentId = null }) {
   name = cleanName(name);
   if (parentId != null) {
     const parent = getOne(db, parentId);
-    if (parent.parent_id != null) throw new CategoryError(400, 'Sub-categories can only be added to a top-level category.');
+    if (depthOf(db, parent) >= 2) throw new CategoryError(400, 'Types are the deepest level. Add it to a category or sub-category instead.');
     parentId = parent.id;
   }
   assertUnique(db, name, parentId);
@@ -122,12 +155,10 @@ function renameCategory(db, id, name) {
   assertUnique(db, name, c.parent_id, c.id);
   db.exec('BEGIN');
   try {
+    const names = pathOf(db, c), col = LEVEL_COLS[names.length - 1], w = whereUnder(names);
     db.prepare('UPDATE categories SET name = ? WHERE id = ?').run(name, c.id);
-    if (c.parent_id == null) {
-      for (const t of ['products', 'listings', 'purchases']) db.prepare(`UPDATE ${t} SET category = ? WHERE category = ?`).run(name, c.name);
-    } else {
-      const parent = getOne(db, c.parent_id);
-      for (const t of ['products', 'listings']) db.prepare(`UPDATE ${t} SET sub_category = ? WHERE category = ? AND sub_category = ?`).run(name, parent.name, c.name);
+    for (const t of names.length === 1 ? ['products', 'listings', 'purchases'] : ['products', 'listings']) {
+      db.prepare(`UPDATE ${t} SET ${col} = ? WHERE ${w.sql}`).run(name, ...w.args);
     }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -147,19 +178,14 @@ function moveCategory(db, id, step) {
   return getOne(db, c.id);
 }
 
-// Delete a category (with its sub-categories) or a sub-category, but only when no product or listing uses it.
+// Delete a category, sub-category or type (with everything under it), but only when no product or listing uses it.
 function deleteCategory(db, id) {
   const c = getOne(db, id);
-  let used;
-  if (c.parent_id == null) {
-    used = ['products', 'listings'].reduce((n, t) => n + db.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE category = ?`).get(c.name).c, 0);
-  } else {
-    const parent = getOne(db, c.parent_id);
-    used = ['products', 'listings'].reduce((n, t) => n + db.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE category = ? AND sub_category = ?`).get(parent.name, c.name).c, 0);
-  }
+  const w = whereUnder(pathOf(db, c));
+  const used = ['products', 'listings'].reduce((n, t) => n + db.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE ${w.sql}`).get(...w.args).c, 0);
   if (used) throw new CategoryError(409, `"${c.name}" is used by ${used} product${used === 1 ? '' : 's'} or listing${used === 1 ? '' : 's'}. Move them first, or rename it instead.`);
   db.prepare('DELETE FROM categories WHERE id = ?').run(c.id);
   return { ok: true };
 }
 
-module.exports = { seedCategories, categoryTree, findTop, checkPair, addCategory, renameCategory, moveCategory, deleteCategory, CategoryError };
+module.exports = { seedCategories, categoryTree, findTop, checkPath, addCategory, renameCategory, moveCategory, deleteCategory, CategoryError };

@@ -81,14 +81,14 @@ test('categories can be edited while the app runs, only with the admin key', () 
   assert.equal((await post(`${base}/api/categories`, { name: 'Jewellery' })).status, 401);
   assert.equal((await post(`${base}/api/categories`, { name: 'Jewellery' }, { 'X-Admin-Key': 'nope' })).status, 401);
 
-  let tree = await (await post(`${base}/api/categories`, { name: 'Jewellery & Accessories' }, H)).json();
-  const jewel = tree.find(c => c.name === 'Jewellery & Accessories');
+  let tree = await (await post(`${base}/api/categories`, { name: 'Musical Instruments' }, H)).json();
+  const jewel = tree.find(c => c.name === 'Musical Instruments');
   assert.ok(jewel);
-  assert.equal((await post(`${base}/api/categories`, { name: 'jewellery & accessories' }, H)).status, 409);
+  assert.equal((await post(`${base}/api/categories`, { name: 'musical instruments' }, H)).status, 409);
   tree = await (await post(`${base}/api/categories`, { name: 'Watches', parentId: jewel.id }, H)).json();
   const watches = tree.find(c => c.id === jewel.id).subcategories[0];
   assert.equal(watches.name, 'Watches');
-  assert.equal((await post(`${base}/api/categories`, { name: 'Too deep', parentId: watches.id }, H)).status, 400);
+  assert.equal((await post(`${base}/api/categories`, { name: 'Smart Watches', parentId: watches.id }, H)).status, 200);  // a type under a sub-category
 
   // New sub-categories sort before "Other", and can be used straight away.
   const fashion = tree.find(c => c.name === 'Fashion & Clothing');
@@ -117,7 +117,7 @@ test('categories can be edited while the app runs, only with the admin key', () 
   assert.equal((await send('DELETE', `${base}/api/categories/${ethnic.id}`, null, H)).status, 409);
   assert.equal((await send('DELETE', `${base}/api/categories/${watches.id}`, null, H)).status, 200);
   tree = await (await send('DELETE', `${base}/api/categories/${jewel.id}`, null, H)).json();
-  assert.ok(!tree.some(c => c.name === 'Jewellery & Accessories'));
+  assert.ok(!tree.some(c => c.name === 'Musical Instruments'));
 }, { adminKey: 'secret-key' }));
 
 test('category editing is off when no admin key is set', () => withServer(async base => {
@@ -150,20 +150,23 @@ test('Buy links go to the store: feed URL first, else the store search', () => {
   assert.equal(buyUrl({ store: 'Meesho', url: 'javascript:alert(1)' }, 'Kurta'), 'https://www.meesho.com/search?q=Kurta');
 });
 
-test('Medical-Billing-System categories are imported once, and deletions stick', () => {
+test('GiaZoNest categories, sub-categories and types are imported once, and deletions stick', () => {
   const { categoryTree, deleteCategory, seedCategories } = require('../server/categories');
-  const medical = require('../server/category-sets/medical');
   const db = openDb(':memory:');
   seed(db, { purchaseDays: 7 });
   const tree = categoryTree(db);
-  assert.equal(tree.length, 6 + 21);
-  const pharmacy = tree.find(c => c.name === 'Pharmacy');
-  assert.deepEqual(pharmacy.subcategories.map(s => s.name), medical.find(([n]) => n === 'Pharmacy')[1]);
-  assert.equal(tree.reduce((n, c) => n + c.subcategories.length, 0), 7 + 118);
+  // 6 Comparezo starters + 21 GiaZoNest categories, sharing "Fashion & Clothing".
+  assert.equal(tree.length, 26);
+  const school = tree.find(c => c.name === 'School & Education');
+  const music = school.subcategories.find(s => s.name === 'Music');
+  assert.ok(music.types.some(t => t.name === 'Sitar'));
+  assert.equal(school.subcategories.at(-1).name, 'Other');
+  assert.equal(tree.reduce((n, c) => n + c.subcategories.reduce((m, s) => m + s.types.length, 0), 0), 117);
+  assert.equal(tree.find(c => c.name === 'Fashion & Clothing').subcategories.length, 7);
 
-  deleteCategory(db, pharmacy.id);
+  deleteCategory(db, tree.find(c => c.name === 'Doctors').id);
   assert.equal(seedCategories(db), false);
-  assert.ok(!categoryTree(db).some(c => c.name === 'Pharmacy'));
+  assert.ok(!categoryTree(db).some(c => c.name === 'Doctors'));
 });
 
 test('a database seeded before category sets existed gets only the new set', () => {
@@ -171,6 +174,33 @@ test('a database seeded before category sets existed gets only the new set', () 
   db.prepare("INSERT INTO categories (name, parent_id, position) VALUES ('Fashion & Clothing', NULL, 0)").run();
   require('../server/categories').seedCategories(db);
   const names = require('../server/categories').categoryTree(db).map(c => c.name);
-  assert.ok(names.includes('Pharmacy'));
+  assert.ok(names.includes('Real Estate'));
   assert.ok(!names.includes('Electronics'));
 });
+
+test('three levels: sellers pick a type when the sub-category has types, and admins can edit types', () => withServer(async base => {
+  const H = { 'X-Admin-Key': 'k' };
+  const tree = await (await fetch(`${base}/api/categories`)).json();
+  const school = tree.find(c => c.name === 'School & Education');
+  const music = school.subcategories.find(s => s.name === 'Music');
+  const l = { title: 'Sitar lessons', category: 'School & Education', subCategory: 'Music', condition: 'New', price: 800, city: 'Pune', sellerName: 'Ravi' };
+  assert.equal((await post(`${base}/api/listings`, l)).status, 400);
+  assert.equal((await post(`${base}/api/listings`, { ...l, type: 'Banjo' })).status, 400);
+  const made = await post(`${base}/api/listings`, { ...l, type: 'Sitar' });
+  assert.equal(made.status, 201);
+  assert.equal((await made.json()).type, 'Sitar');
+  // A sub-category without types takes no type.
+  assert.equal((await post(`${base}/api/listings`, { ...l, subCategory: 'Other', type: 'Sitar' })).status, 400);
+
+  let t = await (await post(`${base}/api/categories`, { name: 'Santoor', parentId: music.id }, H)).json();
+  const santoor = t.find(c => c.id === school.id).subcategories.find(s => s.id === music.id).types.find(x => x.name === 'Santoor');
+  assert.ok(santoor);
+  assert.equal((await post(`${base}/api/categories`, { name: 'Too deep', parentId: santoor.id }, H)).status, 400);
+
+  const sitar = music.types.find(x => x.name === 'Sitar');
+  await send('PATCH', `${base}/api/categories/${sitar.id}`, { name: 'Sitar (Classical)' }, H);
+  const listings = await (await fetch(`${base}/api/listings`)).json();
+  assert.equal(listings.find(x => x.title === 'Sitar lessons').type, 'Sitar (Classical)');
+  assert.equal((await send('DELETE', `${base}/api/categories/${music.id}`, null, H)).status, 409);
+  assert.equal((await send('DELETE', `${base}/api/categories/${santoor.id}`, null, H)).status, 200);
+}, { adminKey: 'k' }));

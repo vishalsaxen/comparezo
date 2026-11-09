@@ -41,13 +41,13 @@ On first start the app creates `data/comparezo.db` and fills it with sample prod
 
 ## Categories
 
-Categories and sub-categories are stored in the database, not in code, so they can be changed while the app runs. They follow the same shape as giazonest: each category has a list of sub-categories, and "Other" always sorts last. The app starts with **Fashion & Clothing** (Men's Wear, Women's Wear, Kids' Wear, Footwear, Bags & Accessories, Leather, Other) plus the earlier top-level categories. It also imports the 21 main categories and 118 sub-categories from the Medical-Billing-System app (`server/category-sets/medical.js`), such as Pharmacy, Vaccine, Surgical Instruments and Pet Care.
+Categories and sub-categories are stored in the database, not in code, so they can be changed while the app runs. They follow the same shape as giazonest: each category has a list of sub-categories, and "Other" always sorts last. The app starts with **Fashion & Clothing** (Men's Wear, Women's Wear, Kids' Wear, Footwear, Bags & Accessories, Leather, Other) plus the earlier top-level categories. It also imports GiaZoNest's full list (`server/category-sets/giazonest.js`): 21 categories, 141 sub-categories and 117 types (sub-sub-categories, used by School & Education), such as Home & Kitchen, Doctors, Real Estate and School & Education › Music › Sitar.
 
 Starting categories come in sets (`SETS` in `server/categories.js`). Each set is added once, the first time the app starts with it, and the `category_sets` table remembers which ones were added, so a category you delete doesn't come back. To add more starting categories, append a new set.
 
 To edit them, set an `ADMIN_KEY` environment variable on the server, open `/categories.html` (linked as "Manage categories" in the footer), and enter the key. You can add, rename, reorder and delete categories and sub-categories there. Renaming also updates existing products and listings. A category that is still used by a product or listing can't be deleted. Without `ADMIN_KEY`, editing is turned off.
 
-Sellers pick a sub-category when the category has them, and shoppers can narrow search results by sub-category.
+Sellers pick a sub-category when the category has them, and a type when the sub-category has types. Shoppers can narrow search results by sub-category and type. Products and listings store these in `category`, `sub_category` and `type`.
 
 ## Getting real prices
 
