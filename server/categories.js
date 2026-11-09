@@ -12,23 +12,46 @@ const STARTER = [
   ['Beauty', []],
 ];
 
+// Starting category sets, oldest first. Each set is added once, the first time the app starts
+// with it; deleting a category afterwards doesn't bring it back. To add more, append a new set.
+const SETS = [
+  ['starter', STARTER],
+  ['medical-billing-system', require('./category-sets/medical')],
+];
+
 const MAX_NAME = 40;
 
 class CategoryError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-// Fill an empty categories table. Returns true if it seeded anything.
+// Add any starting category sets this database hasn't had yet. Returns true if it added anything.
 function seedCategories(db) {
-  if (db.prepare('SELECT COUNT(*) AS c FROM categories').get().c > 0) return false;
+  db.exec('CREATE TABLE IF NOT EXISTS category_sets (name TEXT PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
+  const done = new Set(db.prepare('SELECT name FROM category_sets').all().map(r => r.name));
+  // Databases from before sets were tracked already have the starter set.
+  if (!done.size && db.prepare('SELECT COUNT(*) AS c FROM categories').get().c > 0) {
+    db.prepare("INSERT INTO category_sets (name) VALUES ('starter')").run();
+    done.add('starter');
+  }
+  const todo = SETS.filter(([name]) => !done.has(name));
+  if (!todo.length) return false;
+
+  const findTopId = db.prepare('SELECT id FROM categories WHERE parent_id IS NULL AND name = ? COLLATE NOCASE');
+  const findSub = db.prepare('SELECT id FROM categories WHERE parent_id = ? AND name = ? COLLATE NOCASE');
+  const nextPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM categories WHERE COALESCE(parent_id, 0) = ?');
   const ins = db.prepare('INSERT INTO categories (name, parent_id, position) VALUES (?, ?, ?)');
   db.exec('BEGIN');
   try {
-    STARTER.forEach(([name, subs], i) => {
-      const id = Number(ins.run(name, null, i).lastInsertRowid);
-      subs.forEach((s, j) => ins.run(s, id, j));
-    });
-    // Data saved before this change used "Fashion" with no sub-category.
+    for (const [setName, list] of todo) {
+      for (const [name, subs] of list) {
+        // A category that already exists keeps its place and gains any missing sub-categories.
+        const id = findTopId.get(name)?.id ?? Number(ins.run(name, null, nextPos.get(0).p).lastInsertRowid);
+        for (const sub of subs) if (!findSub.get(id, sub)) ins.run(sub, id, nextPos.get(id).p);
+      }
+      db.prepare('INSERT INTO category_sets (name) VALUES (?)').run(setName);
+    }
+    // Data saved before sub-categories existed used "Fashion" with no sub-category.
     for (const t of ['products', 'listings', 'purchases']) db.prepare(`UPDATE ${t} SET category = ? WHERE category = 'Fashion'`).run('Fashion & Clothing');
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }

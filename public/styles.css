@@ -198,3 +198,7 @@ footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
 .contact{flex-basis:100%; background:var(--brand-soft); border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; font-size:14px}
 .lcard .row .btn{white-space:nowrap; padding:6px 0; color:var(--brand)}
 .thumb.photo{background:#fff center/contain no-repeat; border:1px solid var(--line)}
+
+/* With many categories, keep each chip row to one line that scrolls sideways. */
+#cats,#subcats{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; padding-bottom:4px; -webkit-overflow-scrolling:touch}
+#cats > *,#subcats > *{flex:none; white-space:nowrap}

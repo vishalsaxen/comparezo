@@ -149,3 +149,28 @@ test('Buy links go to the store: feed URL first, else the store search', () => {
   assert.equal(buyUrl({ store: 'Unknown shop' }, 'x'), null);
   assert.equal(buyUrl({ store: 'Meesho', url: 'javascript:alert(1)' }, 'Kurta'), 'https://www.meesho.com/search?q=Kurta');
 });
+
+test('Medical-Billing-System categories are imported once, and deletions stick', () => {
+  const { categoryTree, deleteCategory, seedCategories } = require('../server/categories');
+  const medical = require('../server/category-sets/medical');
+  const db = openDb(':memory:');
+  seed(db, { purchaseDays: 7 });
+  const tree = categoryTree(db);
+  assert.equal(tree.length, 6 + 21);
+  const pharmacy = tree.find(c => c.name === 'Pharmacy');
+  assert.deepEqual(pharmacy.subcategories.map(s => s.name), medical.find(([n]) => n === 'Pharmacy')[1]);
+  assert.equal(tree.reduce((n, c) => n + c.subcategories.length, 0), 7 + 118);
+
+  deleteCategory(db, pharmacy.id);
+  assert.equal(seedCategories(db), false);
+  assert.ok(!categoryTree(db).some(c => c.name === 'Pharmacy'));
+});
+
+test('a database seeded before category sets existed gets only the new set', () => {
+  const db = openDb(':memory:');
+  db.prepare("INSERT INTO categories (name, parent_id, position) VALUES ('Fashion & Clothing', NULL, 0)").run();
+  require('../server/categories').seedCategories(db);
+  const names = require('../server/categories').categoryTree(db).map(c => c.name);
+  assert.ok(names.includes('Pharmacy'));
+  assert.ok(!names.includes('Electronics'));
+});
