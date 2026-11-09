@@ -195,3 +195,4 @@ footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
 @media (prefers-reduced-motion:no-preference){
   .ritem,.chip,.btn,.tabs a{transition:background .15s, border-color .15s, color .15s}
 }
+.contact{flex-basis:100%; background:var(--brand-soft); border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; font-size:14px}
