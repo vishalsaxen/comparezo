@@ -156,7 +156,27 @@ th{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--m
 .top-table td{padding:10px 12px; border-top:1px solid var(--line)}
 .top-table td:first-child{color:var(--muted); width:36px}
 
+/* Category admin */
+.cat-admin{padding-block:32px 56px; display:flex; flex-direction:column; gap:16px}
+.key-row,.add-row{display:flex; gap:12px; align-items:end; flex-wrap:wrap}
+.key-row .field,.add-row .field{flex:1; min-width:220px}
+.cat-tree{display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:16px; align-items:start}
+.cat-card{padding:14px 16px; min-width:0}
+.cat-row{display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:6px 0}
+.cat-row:not(.is-sub) .cat-name{font-family:var(--f-display); font-weight:800; font-size:18px}
+.cat-row.is-sub{border-top:1px solid var(--line); padding-left:12px}
+.cat-name{min-width:0; overflow-wrap:anywhere}
+.cat-actions{display:flex; gap:4px; flex-wrap:wrap}
+.cat-subs{margin-top:4px}
+.btn.small{padding:4px 9px; font-size:12px}
+.btn.danger{color:var(--bad)}
+.add-sub,.rename{display:flex; gap:6px; margin-top:8px}
+.add-sub input,.rename input{flex:1; min-width:0; border:1px solid var(--line); background:var(--bg); border-radius:8px; padding:6px 9px}
+.rename{margin-top:0}
+select:disabled{opacity:.6}
+
 footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+.foot a{color:var(--brand); font-weight:600}
 .foot{padding-block:22px}
 .toast-pop{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--ink); color:var(--surface); padding:10px 16px; border-radius:8px; font-weight:600; z-index:20; max-width:calc(100% - 32px)}
 

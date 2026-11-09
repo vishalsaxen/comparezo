@@ -35,6 +35,7 @@
         <button class="btn btn-brand" type="submit">Compare</button>
       </form>
       <div class="chips" id="cats" aria-label="Categories"></div>
+      <div class="chips" id="subcats" aria-label="Sub-categories" hidden></div>
     </section>
 
     <section class="compare wrap" aria-label="Comparison">
@@ -51,6 +52,7 @@
           <form class="panel sell-form" id="sellForm" novalidate>
             <div class="field full"><label for="s-title">Product name</label><input id="s-title" maxlength="80" placeholder="e.g. Handmade cotton kurta, size M"></div>
             <div class="field"><label for="s-cat">Category</label><select id="s-cat"></select></div>
+            <div class="field"><label for="s-sub">Sub-category</label><select id="s-sub"></select></div>
             <div class="field"><label for="s-cond">Condition</label>
               <select id="s-cond"><option>New</option><option>Handmade</option><option>Like new</option><option>Used, good</option></select></div>
             <div class="field"><label for="s-price">Your price (₹)</label><input id="s-price" type="number" min="1" inputmode="numeric"></div>
@@ -117,7 +119,7 @@
     </section>
   </div>
 </main>
-<footer><div class="wrap foot">Comparezo. Prices shown are sample data until store price feeds are connected.</div></footer>
+<footer><div class="wrap foot">Comparezo. Prices shown are sample data until store price feeds are connected. · <a href="/categories.html">Manage categories</a></div></footer>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/app.js"></script>
 </body>

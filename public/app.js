@@ -6,7 +6,7 @@ const STORE_COLORS = {
 };
 const CATS = {
   Electronics: { c: '#2f5d8a', i: '<path d="M5 14a7 7 0 0114 0v4a2 2 0 01-2 2h-1v-6h3M5 14v4a2 2 0 002 2h1v-6H5" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
-  Fashion: { c: '#a23e5e', i: '<path d="M9 3l3 2 3-2 5 3-2 4-2-1v12H8V9L6 10 4 6z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
+  'Fashion & Clothing': { c: '#a23e5e', i: '<path d="M9 3l3 2 3-2 5 3-2 4-2-1v12H8V9L6 10 4 6z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
   Kitchen: { c: '#9a5b14', i: '<path d="M4 11h16v3a6 6 0 01-6 6h-4a6 6 0 01-6-6zM8 11V8a4 4 0 018 0v3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>' },
   Home: { c: '#3d7a52', i: '<path d="M4 11l8-7 8 7v9H4zM10 20v-5h4v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
   Beauty: { c: '#7a4ba0', i: '<path d="M9 9h6v11H9zM10 9V5l4-2v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>' },
@@ -16,10 +16,19 @@ const CATS = {
 const $ = id => document.getElementById(id);
 const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const thumb = cat => `<div class="thumb" style="background:${(CATS[cat] || CATS.Home).c}"><svg viewBox="0 0 24 24" aria-hidden="true">${(CATS[cat] || CATS.Home).i}</svg></div>`;
+// Categories added at run time get a tag icon and a colour picked from their name.
+const TAG_ICON = '<path d="M3 12V4h8l10 10-8 8zM7.5 8.5h.01" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>';
+const EXTRA_COLORS = ['#2f5d8a', '#9a5b14', '#3d7a52', '#7a4ba0', '#335a6e', '#8a3f2f', '#5a6b1f'];
+function catStyle(cat) {
+  if (CATS[cat]) return CATS[cat];
+  let h = 0; for (const ch of String(cat || '')) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return { c: EXTRA_COLORS[h % EXTRA_COLORS.length], i: TAG_ICON };
+}
+const catLabel = (cat, sub) => sub ? `${cat} › ${sub}` : cat;
+const thumb = cat => `<div class="thumb" style="background:${catStyle(cat).c}"><svg viewBox="0 0 24 24" aria-hidden="true">${catStyle(cat).i}</svg></div>`;
 const sdot = s => `<span class="sdot" style="background:${STORE_COLORS[s] || '#888'}"></span>`;
 async function api(url, opts) {
-  const r = await fetch(url, opts && opts.body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, ...opts, body: JSON.stringify(opts.body) } : opts);
+  const r = await fetch(url, opts && opts.body ? { method: 'POST', ...opts, headers: { 'Content-Type': 'application/json', ...opts.headers }, body: JSON.stringify(opts.body) } : opts);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(data.error || 'Request failed'), { data });
   return data;
@@ -42,12 +51,13 @@ function route() {
 window.addEventListener('hashchange', route);
 
 /* ---------- Comparezo: search + compare ---------- */
-const state = { q: '', cat: null, sel: null, sort: 'eff', extras: true, products: [], detail: null };
+const state = { q: '', cat: null, sub: null, sel: null, sort: 'eff', extras: true, products: [], detail: null };
 
 async function loadProducts() {
   const p = new URLSearchParams();
   if (state.q) p.set('q', state.q);
   if (state.cat) p.set('category', state.cat);
+  if (state.cat && state.sub) p.set('sub', state.sub);
   state.products = await api('/api/products?' + p);
   if (!state.products.some(x => x.id === state.sel)) state.sel = state.products[0]?.id ?? null;
   renderResults();
@@ -55,7 +65,7 @@ async function loadProducts() {
 }
 function renderResults() {
   const list = state.products;
-  $('results').innerHTML = `<div class="results-head"><strong>${list.length} product${list.length === 1 ? '' : 's'}</strong><span class="sub">${state.q ? 'for “' + esc(state.q) + '”' : esc(state.cat || 'Popular today')}</span></div>` +
+  $('results').innerHTML = `<div class="results-head"><strong>${list.length} product${list.length === 1 ? '' : 's'}</strong><span class="sub">${state.q ? 'for “' + esc(state.q) + '”' : esc(state.cat ? catLabel(state.cat, state.sub) : 'Popular today')}</span></div>` +
     (list.length ? list.map(p => `<button class="ritem" data-id="${p.id}" aria-current="${p.id === state.sel}">${thumb(p.category)}<div><div class="t">${esc(p.name)}</div><div class="sub">From <span class="from num">${inr(p.lowest)}</span> · ${p.storeCount} stores</div></div></button>`).join('')
       : '<div class="empty">No products match. Try “earbuds”, “kurta” or “cooker”.</div>');
 }
@@ -70,7 +80,7 @@ function renderDetail() {
     state.sort === 'fast' ? a.delivery_days - b.delivery_days || a.effective - b.effective :
     state.sort === 'rating' ? (b.rating || 0) - (a.rating || 0) : a.effective - b.effective);
   $('detail').innerHTML = `
-    <div class="dhead">${thumb(p.category)}<div class="info"><div class="eyebrow">${esc(p.category)}</div><h2>${esc(p.name)}</h2><div class="sub">${esc(p.spec)}</div></div></div>
+    <div class="dhead">${thumb(p.category)}<div class="info"><div class="eyebrow">${esc(catLabel(p.category, p.sub_category))}</div><h2>${esc(p.name)}</h2><div class="sub">${esc(p.spec)}</div></div></div>
     <div class="verdict">
       <div><div class="eyebrow">Cheapest at</div><div class="store" style="font-size:18px;margin-top:2px">${sdot(best.store)}${esc(best.store)}</div></div>
       <div class="big num">${inr(best.effective)}</div>
@@ -133,15 +143,15 @@ $('detail').addEventListener('change', e => { if (e.target.id === 'extras') { st
 /* ---------- Comparezo: sell ---------- */
 let photo = null;
 function cardHTML(l) {
-  const c = CATS[l.category] || CATS.Home;
+  const c = catStyle(l.category);
   const img = l.photoUrl ? `<div class="img" style="background-image:url('${esc(l.photoUrl)}')"></div>` : `<div class="img" style="background:${c.c}"><svg viewBox="0 0 24 24" aria-hidden="true">${c.i}</svg></div>`;
-  return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(l.price || 0)}</div><div class="t">${esc(l.title || 'Your product name')}</div><div class="sub">${esc(l.city || 'Your city')} · ${esc(l.seller_name || 'You')}</div><div class="row"><span class="cond">${esc(l.condition)}</span><span class="sub">${esc(l.category)}</span></div></div></article>`;
+  return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(l.price || 0)}</div><div class="t">${esc(l.title || 'Your product name')}</div><div class="sub">${esc(l.city || 'Your city')} · ${esc(l.seller_name || 'You')}</div><div class="row"><span class="cond">${esc(l.condition)}</span><span class="sub">${esc(l.sub_category || l.category)}</span></div></div></article>`;
 }
 function readForm() {
-  return { title: $('s-title').value.trim(), category: $('s-cat').value, condition: $('s-cond').value, price: Number($('s-price').value),
+  return { title: $('s-title').value.trim(), category: $('s-cat').value, subCategory: $('s-sub').value, condition: $('s-cond').value, price: Number($('s-price').value),
     city: $('s-city').value.trim(), sellerName: $('s-name').value.trim(), phone: $('s-phone').value.trim(), description: $('s-desc').value.trim(), photo };
 }
-function updatePreview() { const f = readForm(); $('preview').innerHTML = cardHTML({ ...f, seller_name: f.sellerName, photoUrl: photo }); }
+function updatePreview() { const f = readForm(); $('preview').innerHTML = cardHTML({ ...f, seller_name: f.sellerName, sub_category: f.subCategory, photoUrl: photo }); }
 async function loadListings() {
   const list = await api('/api/listings');
   $('lgrid').innerHTML = list.length ? list.map(l => cardHTML({ ...l, photoUrl: l.photo ? '/uploads/' + l.photo : null })).join('') : '<p class="sub">No listings yet. Be the first.</p>';
@@ -168,7 +178,7 @@ $('sellForm').addEventListener('submit', async e => {
   try {
     await api('/api/listings', { body: readForm() });
     status.className = 'ok'; status.textContent = 'Published. Your listing is now live under Local listings.';
-    e.target.reset(); photo = null; drop.querySelector('strong').textContent = 'Drop a photo here'; updatePreview();
+    e.target.reset(); fillSubSelect(); photo = null; drop.querySelector('strong').textContent = 'Drop a photo here'; updatePreview();
     loadListings(); loadDetail();
   } catch (err) {
     status.className = 'err'; status.textContent = (err.data && err.data.errors || [err.message]).join(' ');
@@ -247,18 +257,59 @@ function renderTop(t) {
 $('lzRange').addEventListener('click', e => { const b = e.target.closest('[data-days]'); if (b) { lz.days = Number(b.dataset.days); loadTrends(); } });
 $('lzCat').addEventListener('change', e => { lz.category = e.target.value; loadTrends(); });
 
+/* ---------- Categories (edited at run time on /categories.html) ---------- */
+let categories = [];
+const subsOf = name => (categories.find(c => c.name === name) || { subcategories: [] }).subcategories.map(s => s.name);
+const opt = (v, label = v) => `<option value="${esc(v)}">${esc(label)}</option>`;
+function renderCatChips() {
+  $('cats').innerHTML = '<span class="sub">Browse:</span>' + categories.map(c => `<button type="button" class="chip" data-cat="${esc(c.name)}" aria-pressed="${c.name === state.cat}">${esc(c.name)}</button>`).join('');
+  const subs = state.cat ? subsOf(state.cat) : [];
+  $('subcats').hidden = !subs.length;
+  $('subcats').innerHTML = subs.length ? `<span class="sub">${esc(state.cat)}:</span>` + subs.map(s => `<button type="button" class="chip" data-sub="${esc(s)}" aria-pressed="${s === state.sub}">${esc(s)}</button>`).join('') : '';
+}
+function fillSubSelect(keep) {
+  const subs = subsOf($('s-cat').value);
+  $('s-sub').innerHTML = subs.length ? opt('', 'Select sub-category') + subs.map(s => opt(s)).join('') : opt('', 'None');
+  $('s-sub').disabled = !subs.length;
+  if (keep && subs.includes(keep)) $('s-sub').value = keep;
+}
+async function loadCategories() {
+  const fresh = await api('/api/categories');
+  if (JSON.stringify(fresh) === JSON.stringify(categories)) return false;
+  categories = fresh;
+  // Keep what the user picked if it still exists.
+  if (state.cat && !categories.some(c => c.name === state.cat)) { state.cat = null; state.sub = null; }
+  if (state.sub && !subsOf(state.cat).includes(state.sub)) state.sub = null;
+  renderCatChips();
+  const cat = $('s-cat').value, sub = $('s-sub').value;
+  $('s-cat').innerHTML = categories.map(c => opt(c.name)).join('');
+  if (categories.some(c => c.name === cat)) $('s-cat').value = cat;
+  fillSubSelect(sub);
+  const lzc = $('lzCat').value;
+  $('lzCat').innerHTML = opt('', 'All categories') + categories.map(c => opt(c.name)).join('');
+  if (categories.some(c => c.name === lzc)) $('lzCat').value = lzc; else lz.category = '';
+  return true;
+}
+$('cats').addEventListener('click', e => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  state.cat = state.cat === b.dataset.cat ? null : b.dataset.cat;
+  state.sub = null;
+  renderCatChips();
+  loadProducts();
+});
+$('subcats').addEventListener('click', e => {
+  const b = e.target.closest('[data-sub]'); if (!b) return;
+  state.sub = state.sub === b.dataset.sub ? null : b.dataset.sub;
+  renderCatChips();
+  loadProducts();
+});
+$('s-cat').addEventListener('change', () => fillSubSelect());
+// Pick up category changes made elsewhere without a page reload.
+window.addEventListener('focus', () => loadCategories().then(changed => { if (changed) { updatePreview(); loadProducts(); } }).catch(() => {}));
+
 /* ---------- Boot ---------- */
 (async () => {
-  const cats = await api('/api/categories');
-  $('cats').innerHTML = '<span class="sub">Browse:</span>' + cats.map(c => `<button type="button" class="chip" data-cat="${c}" aria-pressed="false">${c}</button>`).join('');
-  $('s-cat').innerHTML = cats.map(c => `<option>${c}</option>`).join('');
-  $('lzCat').insertAdjacentHTML('beforeend', cats.map(c => `<option>${c}</option>`).join(''));
-  $('cats').addEventListener('click', e => {
-    const b = e.target.closest('[data-cat]'); if (!b) return;
-    state.cat = state.cat === b.dataset.cat ? null : b.dataset.cat;
-    $('cats').querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x.dataset.cat === state.cat));
-    loadProducts();
-  });
+  await loadCategories();
   updatePreview();
   route();
   await Promise.all([loadProducts(), loadListings()]);
