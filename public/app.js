@@ -171,6 +171,20 @@ async function loadListings() {
   const list = await api('/api/listings');
   $('lgrid').innerHTML = list.length ? list.map(l => cardHTML({ ...l, photoUrl: l.photo ? '/uploads/' + l.photo : null })).join('') : '<p class="sub">No listings yet. Be the first.</p>';
 }
+/* ---------- Comparezo: new arrivals from store feeds ---------- */
+async function loadNewArrivals() {
+  const [data, feeds] = await Promise.all([api('/api/new-arrivals?days=20'), api('/api/feeds')]);
+  const ago = t => { const d = Math.floor((Date.now() - new Date(t.replace(' ', 'T') + 'Z')) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago'; };
+  $('newNote').textContent = feeds.connected.length
+    ? `New products from ${feeds.connected.join(' and ')}, dated by the store's release date or when Comparezo first saw them.`
+    : 'Store feeds are not connected yet. New products from Amazon.in and Flipkart appear here once their partner API keys are added.';
+  $('newGrid').innerHTML = data.items.map(p => {
+    const c = catStyle(p.category);
+    const img = p.image ? `<div class="img" style="background-image:url('${esc(p.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : `<div class="img" style="background:${c.c}"><svg viewBox="0 0 24 24" aria-hidden="true">${c.i}</svg></div>`;
+    const link = p.url ? `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener sponsored">View on ${esc(p.store)}</a>` : '';
+    return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(p.price)}</div><div class="t">${esc(p.name)}</div><div class="sub">${sdot(p.store)}${esc(p.store)} · ${ago(p.arrived_at)}</div><div class="row"><span class="sub">${esc(catLabel(p.category, p.sub_category))}</span>${link}</div></div></article>`;
+  }).join('') || (feeds.connected.length ? '<p class="sub">Nothing new in the last 20 days yet. Feeds refresh every few hours.</p>' : '');
+}
 function loadPhoto(f) {
   if (!f) return;
   if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { $('sellStatus').className = 'err'; $('sellStatus').textContent = 'Photo must be a JPG, PNG or WebP image.'; return; }
@@ -327,6 +341,6 @@ window.addEventListener('focus', () => loadCategories().then(changed => { if (ch
   await loadCategories();
   updatePreview();
   route();
-  await Promise.all([loadProducts(), loadListings()]);
+  await Promise.all([loadProducts(), loadListings(), loadNewArrivals().catch(() => {})]);
 })().catch(err => { $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`; });
 })();

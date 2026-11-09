@@ -51,6 +51,20 @@ Sellers pick a sub-category when the category has them, and shoppers can narrow 
 
 The prices in this app are sample data. Real prices need each store's official partner feed, for example the Amazon Associates Product Advertising API or the Flipkart Affiliate API. Copying prices off store websites is against most stores' terms. Each feed would write into the `offers` table. Each feed would also store the exact product link in `offers.url`.
 
+## New arrivals from store feeds
+
+The Comparezo tab has a **New arrivals, last 20 days** section (`GET /api/new-arrivals?days=20&store=&category=`). It fills from the stores' official partner APIs. Nothing is scraped. Each feed turns on only when its keys are set as environment variables, and feeds refresh every `FEED_INTERVAL_HOURS` (default 6). `GET /api/feeds` shows which feeds are connected and the last run. `POST /api/admin/feeds/run` with the `X-Admin-Key` header runs them now.
+
+Stores don't publish an "uploaded on" date, so a product's arrival date is its store release date when the feed gives one, otherwise the moment Comparezo first saw it (`feed_seen` table).
+
+| Store | How new products are found | Environment variables |
+| --- | --- | --- |
+| Flipkart | Affiliate API Delta Feed. The first run saves the current catalogue as a baseline (not new). Later runs add products whose id was never seen before. | `FLIPKART_AFFILIATE_ID`, `FLIPKART_AFFILIATE_TOKEN`, optional `FLIPKART_CATEGORIES` (JSON map of Flipkart category to `[category, sub-category]`) |
+| Amazon.in | Creators API (replaced PA-API 5 in 2026) `searchItems` sorted by `NewestArrivals`, using `releaseDate` when present | `AMAZON_CREATORS_CLIENT_ID`, `AMAZON_CREATORS_CLIENT_SECRET`, `AMAZON_PARTNER_TAG`, optional `AMAZON_SEARCHES` (JSON list), `AMAZON_TOKEN_URL`, `AMAZON_API_BASE`, `AMAZON_MARKETPLACE` |
+| Meesho | No public product or affiliate API, so not connected | none |
+
+Defaults for the Flipkart categories and Amazon searches are in `server/feeds/index.js`. The "first seen" history lives in the database, so the app needs storage that survives restarts for these dates to be right.
+
 ## Buying
 
 "Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself. For an individual seller, "Contact seller" shows their name, city and phone so the buyer can deal with them directly.

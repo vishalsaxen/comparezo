@@ -53,6 +53,20 @@ CREATE TABLE IF NOT EXISTS categories (
   position INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(COALESCE(parent_id, 0), name COLLATE NOCASE);
+-- Every store product id a feed has ever shown us, with the time we first saw it.
+-- This is how "new arrivals" works: stores don't publish upload dates, so we track first sight.
+CREATE TABLE IF NOT EXISTS feed_seen (
+  store TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  baseline INTEGER NOT NULL DEFAULT 0,   -- 1 = already in the store before we started watching
+  PRIMARY KEY (store, external_id)
+);
+CREATE TABLE IF NOT EXISTS feed_state (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;
@@ -67,6 +81,15 @@ function openDb(file) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
     if (!cols.includes('sub_category')) db.exec(`ALTER TABLE ${table} ADD COLUMN sub_category TEXT`);
   }
+  // Columns for products that come from store feeds.
+  const addCols = (table, defs) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+    for (const [name, type] of defs) if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  };
+  addCols('products', [['image', 'TEXT'], ['source', 'TEXT'], ['first_seen_at', 'TEXT'], ['listed_at', 'TEXT']]);
+  addCols('offers', [['external_id', 'TEXT']]);
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_offers_external ON offers(store, external_id) WHERE external_id IS NOT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_products_first_seen ON products(first_seen_at)');
   return db;
 }
 

@@ -6,11 +6,12 @@ const { compareOffers } = require('./pricing');
 const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
+const feeds = require('./feeds');
 
 const CONDITIONS = ['New', 'Handmade', 'Like new', 'Used, good'];
 const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
-function createApp(db, { uploadsDir, adminKey = '' }) {
+function createApp(db, { uploadsDir, adminKey = '', feedRunner = feeds.createFeedRunner(db) }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
@@ -138,6 +139,14 @@ function createApp(db, { uploadsDir, adminKey = '' }) {
     }
     res.status(400).json({ error: 'Send an offerId or listingId.' });
   });
+
+  // Products that store feeds first showed us in the last N days (default 20).
+  app.get('/api/new-arrivals', (req, res) => {
+    const category = cats.findTop(db, req.query.category) ? req.query.category : null;
+    res.json(feeds.newArrivals(db, { days: req.query.days, store: req.query.store || null, category }));
+  });
+  app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
+  app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
   app.get('/api/trends', (req, res) => {
     const category = cats.findTop(db, req.query.category) ? req.query.category : null;
