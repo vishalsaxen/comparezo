@@ -67,6 +67,12 @@ Stores don't publish an "uploaded on" date, so a product's arrival date is its s
 
 Defaults for the Flipkart categories and Amazon searches are in `server/feeds/index.js`. The "first seen" history lives in the database, so the app needs storage that survives restarts for these dates to be right.
 
+## Adding products by hand
+
+Store APIs are hard to get, so you can also add products yourself. Open `/products.html` (linked as "Add products" in the footer) and enter the `ADMIN_KEY`. Fill in a product, its category, and for each store its price and product link. These links earn commission through Cuelinks like any other store link.
+
+On the free Render plan the database is wiped on restart, so products added on that page don't last. To keep them, click **Copy list** and add the result to `server/catalog.json`. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
+
 ## Earning commission with Cuelinks
 
 Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). The page then loads `/affiliate.js`, which loads Cuelinks' script. When a shopper clicks "Buy on Flipkart", "Buy on Myntra" and so on, Cuelinks turns the link into a commission-earning link for any store you're approved for. Without `CUELINKS_CID`, `/affiliate.js` does nothing.

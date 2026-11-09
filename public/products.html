@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Add products · Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="/" aria-label="Comparezo home">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="var(--brand)"/><path d="M8 18l4-5 3 3 5-7" stroke="var(--marigold)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Comparezo
+    </a>
+    <a class="btn btn-ghost sell-cta" href="/">Back to shop</a>
+  </div>
+</header>
+
+<main class="wrap cat-admin">
+  <div class="eyebrow">Admin</div>
+  <h1 class="lz-title">Add products</h1>
+  <p class="lede">Pick a product on Flipkart, Amazon, Myntra or any store, then paste its link and today's price here. Add the same product from several stores so shoppers can compare. With Cuelinks switched on, every "Buy" click on these links can earn you commission.</p>
+
+  <form class="panel pad key-row" id="keyForm">
+    <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
+    <button class="btn btn-brand" type="submit">Unlock</button>
+    <span id="keyStatus" role="status"></span>
+  </form>
+
+  <form class="panel pad sell-form" id="productForm" novalidate hidden>
+    <div class="field full"><label for="p-name">Product name</label><input id="p-name" maxlength="200" placeholder="e.g. Single-line notebook, 172 pages, pack of 6"></div>
+    <div class="field"><label for="p-cat">Category</label><select id="p-cat"></select></div>
+    <div class="field"><label for="p-sub">Sub-category</label><select id="p-sub"></select></div>
+    <div class="field" id="p-type-wrap" hidden><label for="p-type">Type</label><select id="p-type"></select></div>
+    <div class="field full"><label for="p-spec">Short details</label><input id="p-spec" maxlength="200" placeholder="e.g. A5 size · 70 GSM · Blue cover"></div>
+    <div class="field full"><label for="p-image">Photo link (optional)</label><input id="p-image" placeholder="https://… right-click the store's product photo and choose Copy image address"></div>
+    <div class="field full">
+      <span class="label">Where to buy</span>
+      <div id="offers" class="offer-rows"></div>
+      <button type="button" class="btn btn-ghost small" id="addOffer">+ Add another store</button>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-brand" type="submit">Add product</button>
+      <span id="formStatus" role="status"></span>
+    </div>
+  </form>
+
+  <section id="listWrap" hidden>
+    <h2>Products you added</h2>
+    <p class="sub">Products added here are wiped when the free server restarts. To keep them, click <strong>Copy list</strong> and paste it to Claude, who saves it in the code so it loads on every start.</p>
+    <p><button type="button" class="btn btn-ghost small" id="copyList">Copy list</button> <span id="copyStatus" role="status"></span></p>
+    <div id="list" class="cat-tree"></div>
+  </section>
+</main>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/products-admin.js"></script>
+<script src="/affiliate.js" defer></script>
+</body>
+</html>

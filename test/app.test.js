@@ -217,3 +217,51 @@ test('affiliate.js loads Cuelinks only when a numeric CUELINKS_CID is set', asyn
     assert.doesNotMatch(await run("1';alert(1)//"), /alert/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('admin can add, list and delete hand-picked products; catalog.json loads on start', async () => {
+  const { loadCatalog } = require('../server/catalog');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
+  const db = openDb(':memory:');
+  seed(db, { purchaseDays: 5 });
+  const server = createApp(db, { uploadsDir: path.join(dir, 'u'), adminKey: 'k' }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const H = { 'X-Admin-Key': 'k' };
+  const product = { name: 'Spiral notebook A4', category: 'Stationery & Office', subCategory: 'Stationery', spec: '200 pages',
+    offers: [{ store: 'Flipkart', price: 120, mrp: 150, url: 'https://www.flipkart.com/x/p/itm1' }, { store: 'Amazon.in', price: 115, url: 'https://www.amazon.in/dp/B01' }] };
+  try {
+    assert.equal((await post(`${base}/api/admin/products`, product)).status, 401);
+    const bad = await post(`${base}/api/admin/products`, { name: 'x', category: 'Stationery & Office', offers: [{ store: 'Flipkart', price: 0, url: 'http://x' }] }, H);
+    assert.equal(bad.status, 400);
+    assert.equal((await bad.json()).errors.length, 3);   // sub-category, price, link
+
+    const made = await post(`${base}/api/admin/products`, product, H);
+    assert.equal(made.status, 201);
+    const p = await made.json();
+    assert.equal(p.offers.length, 2);
+    const found = await (await fetch(`${base}/api/products?q=Spiral`)).json();
+    assert.equal(found[0].lowest, 115);
+    const detail = await (await fetch(`${base}/api/products/${p.id}`)).json();
+    assert.equal(detail.offers.find(o => o.store === 'Flipkart').buyUrl, 'https://www.flipkart.com/x/p/itm1');
+    assert.equal((await (await fetch(`${base}/api/admin/products`, { headers: H })).json()).length, 1);
+
+    await post(`${base}/api/purchases`, { offerId: detail.cheapest.id });
+    assert.equal((await send('DELETE', `${base}/api/admin/products/${p.id}`, null, H)).status, 200);
+    assert.equal((await (await fetch(`${base}/api/products?q=Spiral`)).json()).length, 0);
+    // Sample products can't be deleted from here.
+    assert.equal((await send('DELETE', `${base}/api/admin/products/1`, null, H)).status, 404);
+
+    const file = path.join(dir, 'catalog.json');
+    fs.writeFileSync(file, JSON.stringify([product, { name: 'Broken', category: 'Nope', offers: [] }]));
+    const first = loadCatalog(db, file);
+    assert.equal(first.added, 1);
+    assert.equal(first.problems.length, 1);
+    assert.equal(loadCatalog(db, file).added, 0);   // not added twice
+  } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the real catalog.json is valid', () => {
+  const { loadCatalog } = require('../server/catalog');
+  const db = openDb(':memory:');
+  seed(db, { purchaseDays: 1 });
+  assert.deepEqual(loadCatalog(db).problems, []);
+});
