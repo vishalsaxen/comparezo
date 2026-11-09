@@ -107,13 +107,18 @@ function renderDetail() {
           <td class="r num eff">${inr(r.effective)}</td>
           <td>${r.delivery_days === 1 ? 'Tomorrow' : r.delivery_days + ' days'}</td>
           <td>${r.rating ? `<span class="num">${Number(r.rating).toFixed(1)}</span> <span class="sub">/ 5</span>` : '<span class="sub">New</span>'}</td>
-          <td><button class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" data-buy-offer="${r.id}">Buy here</button></td>
+          <td>${r.buyUrl ? `<a class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" href="${esc(r.buyUrl)}" target="_blank" rel="noopener noreferrer sponsored" data-buy-offer="${r.id}" data-store="${esc(r.store)}">Buy on ${esc(r.store)} ↗</a>` : '<span class="sub">No link yet</span>'}</td>
         </tr>`; }).join('')}
       </tbody></table></div>
     <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices are sample data until store feeds are connected.</p>
     ${d.localListings.length ? `<div class="locals"><h3>Also from individual sellers in ${esc(p.category)}</h3>${d.localListings.map(l => `
       <div class="local-row"><div><strong>${esc(l.title)}</strong><div class="sub">${esc(l.seller_name)} · ${esc(l.city)} · ${esc(l.condition)}</div></div>
-      <div style="display:flex;gap:10px;align-items:center"><span class="num eff">${inr(l.price)}</span><button class="btn btn-ghost go" data-buy-listing="${l.id}">Buy from seller</button></div></div>`).join('')}</div>` : ''}`;
+      <div style="display:flex;gap:10px;align-items:center"><span class="num eff">${inr(l.price)}</span><button class="btn btn-ghost go" data-contact-listing="${l.id}" aria-expanded="false">Contact seller</button></div>
+      <div class="contact" id="contact-${l.id}" hidden>
+        <div><strong>${esc(l.seller_name)}</strong> · ${esc(l.city)}</div>
+        ${l.phone ? `<div>Call or WhatsApp: <span class="num" style="user-select:all">${esc(l.phone)}</span></div>` : '<div class="sub">This seller hasn\'t added a phone number yet.</div>'}
+        <div class="sub">Agree the price and delivery directly with the seller. Pay only after you've seen the product.</div>
+      </div></div>`).join('')}</div>` : ''}`;
 }
 
 $('searchForm').addEventListener('submit', e => { e.preventDefault(); state.q = $('q').value.trim(); loadProducts(); });
@@ -127,17 +132,27 @@ $('results').addEventListener('click', e => {
 $('detail').addEventListener('click', async e => {
   const s = e.target.closest('[data-sort]');
   if (s) { state.sort = s.dataset.sort; renderDetail(); return; }
-  const b = e.target.closest('[data-buy-offer],[data-buy-listing]');
-  if (!b) return;
-  b.disabled = true;
-  try {
-    const body = b.dataset.buyOffer ? { offerId: Number(b.dataset.buyOffer) } : { listingId: Number(b.dataset.buyListing) };
-    const r = await api('/api/purchases', { body });
-    toast(`Purchase recorded: ${inr(r.amount)} at ${r.store}. It now shows in Linezo.`);
-    linezoLoaded = false;
-  } catch (err) { toast(err.message); }
-  b.disabled = false;
+  // "Buy on <store>" is a real link, so the browser opens the store in a new tab.
+  // We record the click for Linezo in the background without blocking it.
+  const a = e.target.closest('a[data-buy-offer]');
+  if (a) {
+    recordPurchase({ offerId: Number(a.dataset.buyOffer) });
+    toast(`Opening ${a.dataset.store} in a new tab.`);
+    return;
+  }
+  const c = e.target.closest('[data-contact-listing]');
+  if (!c) return;
+  const box = $('contact-' + c.dataset.contactListing);
+  const opening = box.hidden;
+  box.hidden = !opening;
+  c.setAttribute('aria-expanded', opening);
+  c.textContent = opening ? 'Hide contact' : 'Contact seller';
+  if (opening && !c.dataset.counted) { c.dataset.counted = '1'; recordPurchase({ listingId: Number(c.dataset.contactListing) }); }
 });
+function recordPurchase(body) {
+  fetch('/api/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true })
+    .then(r => { if (r.ok) linezoLoaded = false; }).catch(() => {});
+}
 $('detail').addEventListener('change', e => { if (e.target.id === 'extras') { state.extras = e.target.checked; loadDetail(); } });
 
 /* ---------- Comparezo: sell ---------- */

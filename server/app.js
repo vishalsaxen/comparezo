@@ -3,6 +3,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { compareOffers } = require('./pricing');
+const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
 
@@ -73,6 +74,7 @@ function createApp(db, { uploadsDir, adminKey = '' }) {
     if (!p) return res.status(404).json({ error: 'Product not found' });
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
+    comparison.offers.forEach(o => { o.buyUrl = buyUrl(o, p.name); });
     // Listings in the same category, with the same sub-category first.
     const localListings = db.prepare(`SELECT * FROM listings WHERE category = ?
       ORDER BY (sub_category IS ?) DESC, created_at DESC, id DESC LIMIT 3`).all(p.category, p.sub_category);

@@ -140,3 +140,12 @@ test('older databases get sub-category columns and "Fashion" becomes "Fashion & 
   db.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('Buy links go to the store: feed URL first, else the store search', () => {
+  const { buyUrl } = require('../server/stores');
+  assert.equal(buyUrl({ store: 'Amazon.in', url: 'https://www.amazon.in/dp/X1' }, 'Earbuds'), 'https://www.amazon.in/dp/X1');
+  assert.equal(buyUrl({ store: 'Flipkart' }, 'Smart Band'), 'https://www.flipkart.com/search?q=Smart%20Band');
+  assert.equal(buyUrl({ store: 'Myntra' }, "Men's Running Shoes"), 'https://www.myntra.com/men-s-running-shoes');
+  assert.equal(buyUrl({ store: 'Unknown shop' }, 'x'), null);
+  assert.equal(buyUrl({ store: 'Meesho', url: 'javascript:alert(1)' }, 'Kurta'), 'https://www.meesho.com/search?q=Kurta');
+});

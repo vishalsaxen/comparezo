@@ -49,4 +49,10 @@ Sellers pick a sub-category when the category has them, and shoppers can narrow 
 
 ## Getting real prices
 
-The prices in this app are sample data. Real prices need each store's official partner feed, for example the Amazon Associates Product Advertising API or the Flipkart Affiliate API. Copying prices off store websites is against most stores' terms. Each feed would write into the `offers` table. When a shopper clicks "Buy here", the click is recorded as a purchase. In production this should come from the affiliate network's order reports, so Linezo reflects real orders.
+The prices in this app are sample data. Real prices need each store's official partner feed, for example the Amazon Associates Product Advertising API or the Flipkart Affiliate API. Copying prices off store websites is against most stores' terms. Each feed would write into the `offers` table. Each feed would also store the exact product link in `offers.url`.
+
+## Buying
+
+"Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself. For an individual seller, "Contact seller" shows their name, city and phone so the buyer can deal with them directly.
+
+For now, each of those clicks is counted as a purchase for Linezo. In production this should come from the affiliate network's order reports, so Linezo reflects real orders.
