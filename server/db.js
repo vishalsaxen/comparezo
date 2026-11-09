@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS purchases (
   quantity INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,  -- NULL for a top-level category
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(COALESCE(parent_id, 0), name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;
@@ -55,6 +62,11 @@ function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // Older databases were created before sub-categories existed.
+  for (const table of ['products', 'listings']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+    if (!cols.includes('sub_category')) db.exec(`ALTER TABLE ${table} ADD COLUMN sub_category TEXT`);
+  }
   return db;
 }
 

@@ -24,7 +24,7 @@ On first start the app creates `data/comparezo.db` and fills it with sample prod
 | Part | Where | What it does |
 | --- | --- | --- |
 | Server | `server/app.js` | JSON API built with Express |
-| Database | `server/db.js` | Tables: `products`, `offers` (one row per store price), `listings` (individual sellers), `purchases` |
+| Database | `server/db.js` | Tables: `products`, `offers` (one row per store price), `listings` (individual sellers), `purchases`, `categories` |
 | Cheapest price | `server/pricing.js` | You pay = price + delivery − coupon. If two stores tie, the faster delivery wins. |
 | Linezo trends | `server/trends.js` | Daily units and revenue, change compared with the previous period, store and category share, best sellers |
 | Front end | `public/` | Plain HTML, CSS and JS with no build step. `#compare` and `#linezo` switch tabs. |
@@ -36,6 +36,16 @@ On first start the app creates `data/comparezo.db` and fills it with sample prod
 - `GET /api/listings` and `POST /api/listings`: individual seller listings. Photos are sent as data URLs, up to 3 MB.
 - `POST /api/purchases` with `{offerId}` or `{listingId}`: records a purchase, which feeds Linezo
 - `GET /api/trends?days=30&category=`: the data behind Linezo
+- `GET /api/categories`: the category tree, each category with its `subcategories`
+- `POST /api/categories` with `{name, parentId?}`, `PATCH /api/categories/:id` with `{name}` or `{move: "up"|"down"}`, and `DELETE /api/categories/:id`: edit categories. These need the `X-Admin-Key` header.
+
+## Categories
+
+Categories and sub-categories are stored in the database, not in code, so they can be changed while the app runs. They follow the same shape as giazonest: each category has a list of sub-categories, and "Other" always sorts last. The app starts with **Fashion & Clothing** (Men's Wear, Women's Wear, Kids' Wear, Footwear, Bags & Accessories, Leather, Other) plus the earlier top-level categories.
+
+To edit them, set an `ADMIN_KEY` environment variable on the server, open `/categories.html` (linked as "Manage categories" in the footer), and enter the key. You can add, rename, reorder and delete categories and sub-categories there. Renaming also updates existing products and listings. A category that is still used by a product or listing can't be deleted. Without `ADMIN_KEY`, editing is turned off.
+
+Sellers pick a sub-category when the category has them, and shoppers can narrow search results by sub-category.
 
 ## Getting real prices
 

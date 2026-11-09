@@ -4,12 +4,12 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { compareOffers } = require('./pricing');
 const { getTrends } = require('./trends');
+const cats = require('./categories');
 
-const CATEGORIES = ['Electronics', 'Fashion', 'Kitchen', 'Home', 'Beauty', 'Mobiles'];
 const CONDITIONS = ['New', 'Handmade', 'Like new', 'Used, good'];
 const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
-function createApp(db, { uploadsDir }) {
+function createApp(db, { uploadsDir, adminKey = '' }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
@@ -18,16 +18,49 @@ function createApp(db, { uploadsDir }) {
 
   const offersFor = db.prepare('SELECT * FROM offers WHERE product_id = ?');
 
-  app.get('/api/categories', (_req, res) => res.json(CATEGORIES));
+  app.get('/api/categories', (_req, res) => res.json(cats.categoryTree(db)));
+
+  // Editing categories needs the ADMIN_KEY set on the server, sent as the X-Admin-Key header.
+  function requireAdmin(req, res, next) {
+    if (!adminKey) return res.status(403).json({ error: 'Category editing is turned off. Set ADMIN_KEY on the server to turn it on.' });
+    const sent = Buffer.from(String(req.get('x-admin-key') || ''));
+    const want = Buffer.from(adminKey);
+    if (sent.length !== want.length || !crypto.timingSafeEqual(sent, want)) return res.status(401).json({ error: 'Wrong admin key.' });
+    next();
+  }
+  const edit = fn => (req, res) => {
+    try { res.json(fn(req)); } catch (e) {
+      if (e instanceof cats.CategoryError) return res.status(e.status).json({ error: e.message });
+      throw e;
+    }
+  };
+  app.post('/api/admin/check', requireAdmin, (_req, res) => res.json({ ok: true }));
+  app.post('/api/categories', requireAdmin, edit(req => {
+    const b = req.body || {};
+    cats.addCategory(db, { name: b.name, parentId: b.parentId ?? null });
+    return cats.categoryTree(db);
+  }));
+  app.patch('/api/categories/:id', requireAdmin, edit(req => {
+    const b = req.body || {};
+    if (b.name !== undefined) cats.renameCategory(db, req.params.id, b.name);
+    if (b.move === 'up' || b.move === 'down') cats.moveCategory(db, req.params.id, b.move === 'up' ? -1 : 1);
+    return cats.categoryTree(db);
+  }));
+  app.delete('/api/categories/:id', requireAdmin, edit(req => {
+    cats.deleteCategory(db, req.params.id);
+    return cats.categoryTree(db);
+  }));
 
   // Search products; each result carries its cheapest effective price.
   app.get('/api/products', (req, res) => {
     const q = String(req.query.q || '').trim();
-    const cat = CATEGORIES.includes(req.query.category) ? req.query.category : null;
+    const cat = cats.findTop(db, req.query.category) ? req.query.category : null;
+    const sub = cat && req.query.sub ? String(req.query.sub) : null;
     let sql = 'SELECT * FROM products WHERE 1=1';
     const args = [];
-    if (q) { sql += ' AND (name LIKE ? OR spec LIKE ? OR category LIKE ?)'; const like = `%${q}%`; args.push(like, like, like); }
+    if (q) { sql += ' AND (name LIKE ? OR spec LIKE ? OR category LIKE ? OR sub_category LIKE ?)'; const like = `%${q}%`; args.push(like, like, like, like); }
     if (cat) { sql += ' AND category = ?'; args.push(cat); }
+    if (sub) { sql += ' AND sub_category = ?'; args.push(sub); }
     const rows = db.prepare(sql + ' ORDER BY id').all(...args).map(p => {
       const c = compareOffers(offersFor.all(p.id));
       return { ...p, storeCount: c.offers.length, lowest: c.cheapest ? c.cheapest.effective : null };
@@ -40,7 +73,9 @@ function createApp(db, { uploadsDir }) {
     if (!p) return res.status(404).json({ error: 'Product not found' });
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
-    const localListings = db.prepare('SELECT * FROM listings WHERE category = ? ORDER BY created_at DESC LIMIT 3').all(p.category);
+    // Listings in the same category, with the same sub-category first.
+    const localListings = db.prepare(`SELECT * FROM listings WHERE category = ?
+      ORDER BY (sub_category IS ?) DESC, created_at DESC, id DESC LIMIT 3`).all(p.category, p.sub_category);
     res.json({ product: p, ...comparison, includeExtras, localListings });
   });
 
@@ -56,7 +91,9 @@ function createApp(db, { uploadsDir }) {
     const seller = String(b.sellerName || '').trim().slice(0, 60);
     const price = Math.round(Number(b.price));
     if (!title) errors.push('Add a product name.');
-    if (!CATEGORIES.includes(b.category)) errors.push('Pick a category.');
+    const subCategory = String(b.subCategory || '').trim() || null;
+    const catError = cats.checkPair(db, b.category, subCategory);
+    if (catError) errors.push(catError);
     if (!CONDITIONS.includes(b.condition)) errors.push('Pick a condition.');
     if (!Number.isFinite(price) || price < 1 || price > 10000000) errors.push('Set a price above ₹0.');
     if (!city) errors.push('Add your city or PIN code.');
@@ -74,8 +111,8 @@ function createApp(db, { uploadsDir }) {
     }
     if (errors.length) return res.status(400).json({ errors });
 
-    const r = db.prepare(`INSERT INTO listings (title, category, condition, price, city, seller_name, phone, description, photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, b.category, b.condition, price, city, seller,
+    const r = db.prepare(`INSERT INTO listings (title, category, sub_category, condition, price, city, seller_name, phone, description, photo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, b.category, subCategory, b.condition, price, city, seller,
       String(b.phone || '').slice(0, 20), String(b.description || '').slice(0, 300), photo);
     res.status(201).json(db.prepare('SELECT * FROM listings WHERE id = ?').get(Number(r.lastInsertRowid)));
   });
@@ -101,11 +138,11 @@ function createApp(db, { uploadsDir }) {
   });
 
   app.get('/api/trends', (req, res) => {
-    const category = CATEGORIES.includes(req.query.category) ? req.query.category : null;
+    const category = cats.findTop(db, req.query.category) ? req.query.category : null;
     res.json(getTrends(db, { days: req.query.days, category }));
   });
 
   return app;
 }
 
-module.exports = { createApp, CATEGORIES };
+module.exports = { createApp };

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manage categories · Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="/" aria-label="Comparezo home">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="var(--brand)"/><path d="M8 18l4-5 3 3 5-7" stroke="var(--marigold)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Comparezo
+    </a>
+    <a class="btn btn-ghost sell-cta" href="/">Back to shop</a>
+  </div>
+</header>
+
+<main class="wrap cat-admin">
+  <div class="eyebrow">Admin</div>
+  <h1 class="lz-title">Categories</h1>
+  <p class="lede">Add, rename, reorder or remove categories and their sub-categories. Changes show up in search, the sell form and Linezo straight away, with no redeploy. "Other" always stays last.</p>
+
+  <form class="panel pad key-row" id="keyForm">
+    <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
+    <button class="btn btn-brand" type="submit">Unlock editing</button>
+    <span id="keyStatus" role="status"></span>
+  </form>
+
+  <form class="panel pad add-row" id="addForm" hidden>
+    <div class="field"><label for="newCat">New category</label><input id="newCat" maxlength="40" placeholder="e.g. Jewellery & Accessories"></div>
+    <button class="btn btn-brand" type="submit">Add category</button>
+  </form>
+
+  <p id="msg" role="status"></p>
+  <div id="tree" class="cat-tree"></div>
+</main>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/categories-admin.js"></script>
+</body>
+</html>
