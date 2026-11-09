@@ -61,7 +61,7 @@ Stores don't publish an "uploaded on" date, so a product's arrival date is its s
 
 | Store | How new products are found | Environment variables |
 | --- | --- | --- |
-| Flipkart | Affiliate API Delta Feed. The first run saves the current catalogue as a baseline (not new). Later runs add products whose id was never seen before. | `FLIPKART_AFFILIATE_ID`, `FLIPKART_AFFILIATE_TOKEN`, optional `FLIPKART_CATEGORIES` (JSON map of Flipkart category to `[category, sub-category]`) |
+| Flipkart | Affiliate API Delta Feed. The first run saves the current catalogue as a baseline (not new) and adds the first 40 in-stock products of each category to the site as normal products. Later runs add products whose id was never seen before. | `FLIPKART_AFFILIATE_ID`, `FLIPKART_AFFILIATE_TOKEN`, optional `FLIPKART_CATEGORIES` (JSON map of Flipkart category to `[category, sub-category]`) |
 | Amazon.in | Creators API (replaced PA-API 5 in 2026) `searchItems` sorted by `NewestArrivals`, using `releaseDate` when present | `AMAZON_CREATORS_CLIENT_ID`, `AMAZON_CREATORS_CLIENT_SECRET`, `AMAZON_PARTNER_TAG`, optional `AMAZON_SEARCHES` (JSON list), `AMAZON_TOKEN_URL`, `AMAZON_API_BASE`, `AMAZON_MARKETPLACE` |
 | Meesho | No public product or affiliate API, so not connected | none |
 

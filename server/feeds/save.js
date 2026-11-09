@@ -28,8 +28,10 @@ function markBaseline(db, store, externalIds) {
   for (const id of externalIds) ins.run(store, String(id));
 }
 
-// Returns 'new', 'updated' or 'skipped'.
-function saveItem(db, item, { now = new Date() } = {}) {
+// Returns 'new', 'catalog', 'updated' or 'skipped'.
+// With catalog: true the product is saved as part of the store's existing range: it shows in search
+// and categories but not under New arrivals.
+function saveItem(db, item, { now = new Date(), catalog = false } = {}) {
   const store = item.store, ext = String(item.externalId || '');
   const price = Math.round(Number(item.price));
   if (!ext || !item.name || !Number.isFinite(price) || price <= 0) return 'skipped';
@@ -42,21 +44,21 @@ function saveItem(db, item, { now = new Date() } = {}) {
     return 'updated';
   }
   const seen = db.prepare('SELECT * FROM feed_seen WHERE store = ? AND external_id = ?').get(store, ext);
-  if (seen && seen.baseline) return 'skipped';   // part of the store's catalogue before we started watching
+  if (seen && seen.baseline && !catalog) return 'skipped';   // part of the store's catalogue before we started watching
 
   const fit = fitCategory(db, item.category, item.subCategory);
   if (!fit) return 'skipped';
   const firstSeen = seen ? seen.first_seen_at : now.toISOString().replace('T', ' ').slice(0, 19);
   db.exec('BEGIN');
   try {
-    if (!seen) db.prepare('INSERT INTO feed_seen (store, external_id, first_seen_at) VALUES (?, ?, ?)').run(store, ext, firstSeen);
+    if (!seen) db.prepare('INSERT INTO feed_seen (store, external_id, first_seen_at, baseline) VALUES (?, ?, ?, ?)').run(store, ext, firstSeen, catalog ? 1 : 0);
     const pid = Number(db.prepare(`INSERT INTO products (name, category, sub_category, spec, image, source, first_seen_at, listed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(String(item.name).slice(0, 200), fit.category, fit.subCategory, String(item.spec || '').slice(0, 200),
-      /^https:\/\//.test(item.image || '') ? item.image : null, store, firstSeen, item.listedAt || null).lastInsertRowid);
+      /^https:\/\//.test(item.image || '') ? item.image : null, store, catalog ? null : firstSeen, catalog ? null : item.listedAt || null).lastInsertRowid);
     db.prepare('INSERT INTO offers (product_id, store, price, mrp, url, external_id) VALUES (?, ?, ?, ?, ?, ?)').run(pid, store, price, mrp, url, ext);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
-  return 'new';
+  return catalog ? 'catalog' : 'new';
 }
 
 module.exports = { saveItem, markBaseline, getState, setState, fitCategory };
