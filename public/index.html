@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="#compare" aria-label="Comparezo home">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="var(--brand)"/><path d="M8 18l4-5 3 3 5-7" stroke="var(--marigold)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Comparezo
+    </a>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <a role="tab" id="tab-compare" href="#compare" aria-controls="view-compare">Comparezo</a>
+      <a role="tab" id="tab-linezo" href="#linezo" aria-controls="view-linezo">Linezo</a>
+    </nav>
+    <a class="btn btn-brand sell-cta" href="#sell">Sell a product</a>
+  </div>
+</header>
+
+<main>
+  <!-- Comparezo tab -->
+  <div id="view-compare" role="tabpanel" aria-labelledby="tab-compare">
+    <section class="hero wrap">
+      <div class="eyebrow">One search, every store</div>
+      <h1>Find the <em>cheapest price</em> before you buy.</h1>
+      <p class="lede">We check Meesho, Amazon.in, Flipkart and other stores side by side, add delivery and coupons, and show you the price you will actually pay.</p>
+      <form class="search" id="searchForm" role="search">
+        <input id="q" type="search" aria-label="Search products" placeholder="Search a product, e.g. earbuds, kurta, pressure cooker" autocomplete="off">
+        <button class="btn btn-brand" type="submit">Compare</button>
+      </form>
+      <div class="chips" id="cats" aria-label="Categories"></div>
+    </section>
+
+    <section class="compare wrap" aria-label="Comparison">
+      <div class="panel results" id="results"></div>
+      <div class="panel detail" id="detail"></div>
+    </section>
+
+    <section class="sell" id="sell">
+      <div class="wrap sell-inner">
+        <div class="eyebrow">For individual sellers</div>
+        <h2>List your own product in two minutes</h2>
+        <p class="lede">No shop needed. Add a photo, set your price, and buyers searching for the same kind of item see your listing next to the big stores.</p>
+        <div class="sell-grid">
+          <form class="panel sell-form" id="sellForm" novalidate>
+            <div class="field full"><label for="s-title">Product name</label><input id="s-title" maxlength="80" placeholder="e.g. Handmade cotton kurta, size M"></div>
+            <div class="field"><label for="s-cat">Category</label><select id="s-cat"></select></div>
+            <div class="field"><label for="s-cond">Condition</label>
+              <select id="s-cond"><option>New</option><option>Handmade</option><option>Like new</option><option>Used, good</option></select></div>
+            <div class="field"><label for="s-price">Your price (₹)</label><input id="s-price" type="number" min="1" inputmode="numeric"></div>
+            <div class="field"><label for="s-city">City / PIN code</label><input id="s-city" placeholder="e.g. Jaipur 302001"></div>
+            <div class="field full"><label for="s-desc">Description</label><textarea id="s-desc" maxlength="300"></textarea></div>
+            <div class="field full">
+              <span class="label">Photo</span>
+              <label class="drop" id="drop" for="s-photo">
+                <input id="s-photo" type="file" accept="image/png,image/jpeg,image/webp">
+                <strong>Drop a photo here</strong> or click to choose<br><span class="hint">JPG, PNG or WebP, up to 3 MB.</span>
+              </label>
+            </div>
+            <div class="field"><label for="s-name">Your name</label><input id="s-name"></div>
+            <div class="field"><label for="s-phone">Phone (shown to buyers)</label><input id="s-phone" inputmode="tel"></div>
+            <div class="form-actions">
+              <button class="btn btn-brand" type="submit">Publish listing</button>
+              <span id="sellStatus" role="status"></span>
+            </div>
+          </form>
+          <div>
+            <div class="eyebrow">Live preview</div>
+            <div id="preview"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="community wrap" id="community">
+      <div class="eyebrow">From individual sellers</div>
+      <h2>Local listings</h2>
+      <div class="lgrid" id="lgrid"></div>
+    </section>
+  </div>
+
+  <!-- Linezo tab -->
+  <div id="view-linezo" role="tabpanel" aria-labelledby="tab-linezo" hidden>
+    <section class="wrap linezo">
+      <div class="lz-head">
+        <div>
+          <div class="eyebrow">Linezo</div>
+          <h1 class="lz-title">What shoppers are buying</h1>
+          <p class="lede">Sales trends from purchases made through Comparezo, across every store and individual seller.</p>
+        </div>
+        <div class="lz-controls">
+          <div class="seg" role="group" aria-label="Time range" id="lzRange">
+            <button data-days="7">7 days</button><button data-days="30">30 days</button><button data-days="90">90 days</button>
+          </div>
+          <select id="lzCat" aria-label="Category"><option value="">All categories</option></select>
+        </div>
+      </div>
+      <div class="kpis" id="lzKpis"></div>
+      <div class="panel chart-panel">
+        <div class="chart-head"><h2>Units sold per day</h2><span class="sub" id="lzRangeLbl"></span></div>
+        <div id="lzChart" class="chart"></div>
+      </div>
+      <div class="lz-grid">
+        <div class="panel pad"><h2>Where people buy</h2><p class="sub">Share of units by store</p><div id="lzStores"></div></div>
+        <div class="panel pad"><h2>Top categories</h2><p class="sub">Units sold</p><div id="lzCats"></div></div>
+      </div>
+      <div class="panel pad">
+        <h2>Best sellers</h2>
+        <div class="tablebox"><table class="top-table"><thead><tr><th>#</th><th>Product</th><th>Category</th><th class="r">Units</th><th class="r">Revenue</th></tr></thead><tbody id="lzTop"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer><div class="wrap foot">Comparezo. Prices shown are sample data until store price feeds are connected.</div></footer>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

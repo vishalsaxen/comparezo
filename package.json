@@ -1,0 +1,27 @@
+{
+  "name": "comparezo",
+  "version": "0.1.0",
+  "description": "Compare prices across Indian online stores, list your own products, and see sales trends in Linezo.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vishalsaxen/comparezo.git"
+  },
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/vishalsaxen/comparezo/issues"
+  },
+  "homepage": "https://github.com/vishalsaxen/comparezo#readme",
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}
