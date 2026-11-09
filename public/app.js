@@ -25,7 +25,10 @@ function catStyle(cat) {
   return { c: EXTRA_COLORS[h % EXTRA_COLORS.length], i: TAG_ICON };
 }
 const catLabel = (cat, sub) => sub ? `${cat} › ${sub}` : cat;
-const thumb = cat => `<div class="thumb" style="background:${catStyle(cat).c}"><svg viewBox="0 0 24 24" aria-hidden="true">${catStyle(cat).i}</svg></div>`;
+// A product from a store feed shows the store's own photo (the feed gives its URL); sample products show a category icon.
+const thumb = (cat, image) => /^https:\/\//.test(image || '')
+  ? `<div class="thumb photo" style="background-image:url('${esc(image)}')" role="img" aria-label=""></div>`
+  : `<div class="thumb" style="background:${catStyle(cat).c}"><svg viewBox="0 0 24 24" aria-hidden="true">${catStyle(cat).i}</svg></div>`;
 const sdot = s => `<span class="sdot" style="background:${STORE_COLORS[s] || '#888'}"></span>`;
 async function api(url, opts) {
   const r = await fetch(url, opts && opts.body ? { method: 'POST', ...opts, headers: { 'Content-Type': 'application/json', ...opts.headers }, body: JSON.stringify(opts.body) } : opts);
@@ -66,7 +69,7 @@ async function loadProducts() {
 function renderResults() {
   const list = state.products;
   $('results').innerHTML = `<div class="results-head"><strong>${list.length} product${list.length === 1 ? '' : 's'}</strong><span class="sub">${state.q ? 'for “' + esc(state.q) + '”' : esc(state.cat ? catLabel(state.cat, state.sub) : 'Popular today')}</span></div>` +
-    (list.length ? list.map(p => `<button class="ritem" data-id="${p.id}" aria-current="${p.id === state.sel}">${thumb(p.category)}<div><div class="t">${esc(p.name)}</div><div class="sub">From <span class="from num">${inr(p.lowest)}</span> · ${p.storeCount} stores</div></div></button>`).join('')
+    (list.length ? list.map(p => `<button class="ritem" data-id="${p.id}" aria-current="${p.id === state.sel}">${thumb(p.category, p.image)}<div><div class="t">${esc(p.name)}</div><div class="sub">From <span class="from num">${inr(p.lowest)}</span> · ${p.storeCount} stores</div></div></button>`).join('')
       : '<div class="empty">No products match. Try “earbuds”, “kurta” or “cooker”.</div>');
 }
 async function loadDetail() {
@@ -80,7 +83,7 @@ function renderDetail() {
     state.sort === 'fast' ? a.delivery_days - b.delivery_days || a.effective - b.effective :
     state.sort === 'rating' ? (b.rating || 0) - (a.rating || 0) : a.effective - b.effective);
   $('detail').innerHTML = `
-    <div class="dhead">${thumb(p.category)}<div class="info"><div class="eyebrow">${esc(catLabel(p.category, p.sub_category))}</div><h2>${esc(p.name)}</h2><div class="sub">${esc(p.spec)}</div></div></div>
+    <div class="dhead">${thumb(p.category, p.image)}<div class="info"><div class="eyebrow">${esc(catLabel(p.category, p.sub_category))}</div><h2>${esc(p.name)}</h2><div class="sub">${esc(p.spec)}</div></div></div>
     <div class="verdict">
       <div><div class="eyebrow">Cheapest at</div><div class="store" style="font-size:18px;margin-top:2px">${sdot(best.store)}${esc(best.store)}</div></div>
       <div class="big num">${inr(best.effective)}</div>
