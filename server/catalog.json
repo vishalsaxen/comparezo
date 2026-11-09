@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "name": "Apple iPhone",
+    "category": "Mobiles",
+    "spec": "Apple iPhone 17e 512 GB: 15.40 cm (6.1″) Super Retina XDR Display, A19 Chip, All-Day Battery Life, 48MP Fusion Camera, 256GB Starting Storage; Black",
+    "image": "https://m.media-amazon.com/images/I/61ULimPWODL._SX679_.jpg",
+    "offers": [
+      {
+        "store": "Amazon.in",
+        "price": 99999,
+        "url": "https://www.amazon.in/Apple-iPhone-17e-512-GB/dp/B0GQVJCHGD"
+      }
+    ]
+  }
+]

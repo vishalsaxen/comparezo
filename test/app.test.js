@@ -19,10 +19,21 @@ test('cheapest store uses price + delivery - coupon, ties go to faster delivery'
   assert.equal(compareOffers(r.offers, { includeExtras: false }).cheapest.store, 'B');
 });
 
+const { addProduct } = require('../server/catalog');
+const offer = (store, price, extra = {}) => ({ store, price, url: `https://www.${store.toLowerCase().replace(/\W/g, '')}.com/p/${price}`, ...extra });
+const SAMPLE = [
+  { name: 'Wireless earbuds', category: 'Electronics', offers: [offer('Amazon.in', 1499), offer('Flipkart', 1449, { deliveryFee: 40 }), offer('Meesho', 1399)] },
+  { name: 'Running shoes', category: 'Fashion & Clothing', subCategory: 'Footwear', offers: [offer('Myntra', 999), offer('Amazon.in', 949)] },
+  { name: 'Cotton kurta', category: 'Fashion & Clothing', subCategory: "Women's Wear", offers: [offer('Myntra', 749), offer('Flipkart', 689)] },
+  { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
+];
+
 async function withServer(fn, { adminKey = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
-  seed(db, { purchaseDays: 60 });
+  seed(db);
+  // A few products, added the way the admin page adds them.
+  for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
   const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
@@ -30,51 +41,48 @@ async function withServer(fn, { adminKey = '' } = {}) {
 const post = (url, body, headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const send = (method, url, body, headers = {}) => fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
 
-test('search, compare, sell, buy, and see it in Linezo', () => withServer(async base => {
+test('search, compare, click Buy, and see it in Linezo', () => withServer(async base => {
   const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
   assert.equal(found.length, 1);
   const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+  assert.equal(detail.cheapest.store, 'Meesho');
   assert.equal(detail.cheapest.effective, found[0].lowest);
   assert.ok(detail.offers.every(o => o.effective >= detail.cheapest.effective));
-
-  const bad = await post(`${base}/api/listings`, { title: '', price: 0 });
-  assert.equal(bad.status, 400);
-  const png = 'data:image/png;base64,' + Buffer.from('fake-png').toString('base64');
-  const made = await post(`${base}/api/listings`, { title: 'Brass diya set', category: 'Home', condition: 'Handmade', price: 350, city: 'Moradabad', sellerName: 'Asha', photo: png });
-  assert.equal(made.status, 201);
-  const listing = await made.json();
-  assert.ok(listing.photo);
-  assert.equal((await fetch(`${base}/uploads/${listing.photo}`)).status, 200);
+  assert.equal(detail.localListings, undefined);
 
   const before = await (await fetch(`${base}/api/trends?days=7`)).json();
   assert.equal(before.daily.length, 7);
+  assert.equal(before.totals.units, 0);   // no sample history any more
   assert.equal((await post(`${base}/api/purchases`, { offerId: detail.cheapest.id, quantity: 2 })).status, 201);
-  assert.equal((await post(`${base}/api/purchases`, { listingId: listing.id })).status, 201);
+  assert.equal((await post(`${base}/api/purchases`, { listingId: 1 })).status, 400);
   const after = await (await fetch(`${base}/api/trends?days=7`)).json();
-  assert.equal(after.totals.units, before.totals.units + 3);
-  assert.equal(after.totals.revenue, before.totals.revenue + detail.cheapest.effective * 2 + 350);
-  assert.ok(after.byStore.some(s => s.store === 'Individual seller'));
+  assert.equal(after.totals.units, 2);
+  assert.equal(after.totals.revenue, detail.cheapest.effective * 2);
+  assert.deepEqual(after.byStore.map(s => s.store), ['Meesho']);
+  assert.equal(after.topProducts[0].name, 'Wireless earbuds');
 
   const homeOnly = await (await fetch(`${base}/api/trends?days=30&category=Home`)).json();
-  assert.ok(homeOnly.byCategory.every(c => c.category === 'Home'));
+  assert.equal(homeOnly.totals.units, 0);
+  assert.equal((await fetch(`${base}/api/listings`)).status, 404);
 }));
 
-test('Fashion & Clothing has the giazonest sub-categories, and sellers must pick one', () => withServer(async base => {
+test('Fashion & Clothing has the giazonest sub-categories, and products must pick one', () => withServer(async base => {
   const tree = await (await fetch(`${base}/api/categories`)).json();
   const fashion = tree.find(c => c.name === 'Fashion & Clothing');
   assert.deepEqual(fashion.subcategories.map(s => s.name), ["Men's Wear", "Women's Wear", "Kids' Wear", 'Footwear', 'Bags & Accessories', 'Leather', 'Other']);
 
   const footwear = await (await fetch(`${base}/api/products?category=${encodeURIComponent('Fashion & Clothing')}&sub=Footwear`)).json();
-  assert.ok(footwear.length >= 1 && footwear.every(p => p.sub_category === 'Footwear'));
+  assert.deepEqual(footwear.map(p => p.name), ['Running shoes']);
 
-  const listing = { title: 'Silk saree', category: 'Fashion & Clothing', condition: 'New', price: 1200, city: 'Varanasi', sellerName: 'Meera' };
-  assert.equal((await post(`${base}/api/listings`, listing)).status, 400);
-  assert.equal((await post(`${base}/api/listings`, { ...listing, subCategory: 'Gadgets' })).status, 400);
-  const ok = await post(`${base}/api/listings`, { ...listing, subCategory: "Women's Wear" });
+  const H = { 'X-Admin-Key': 'k' };
+  const p = { name: 'Silk saree', category: 'Fashion & Clothing', offers: [offer('Myntra', 1200)] };
+  assert.equal((await post(`${base}/api/admin/products`, p, H)).status, 400);
+  assert.equal((await post(`${base}/api/admin/products`, { ...p, subCategory: 'Gadgets' }, H)).status, 400);
+  const ok = await post(`${base}/api/admin/products`, { ...p, subCategory: "Women's Wear" }, H);
   assert.equal(ok.status, 201);
   assert.equal((await ok.json()).sub_category, "Women's Wear");
-  assert.equal((await post(`${base}/api/listings`, { ...listing, category: 'Home', subCategory: "Women's Wear" })).status, 400);
-}));
+  assert.equal((await post(`${base}/api/admin/products`, { ...p, category: 'Home', subCategory: "Women's Wear" }, H)).status, 400);
+}, { adminKey: 'k' }));
 
 test('categories can be edited while the app runs, only with the admin key', () => withServer(async base => {
   const H = { 'X-Admin-Key': 'secret-key' };
@@ -96,7 +104,7 @@ test('categories can be edited while the app runs, only with the admin key', () 
   const subs = tree.find(c => c.id === fashion.id).subcategories.map(s => s.name);
   assert.equal(subs.at(-1), 'Other');
   assert.equal(subs.at(-2), 'Ethnic Wear');
-  const made = await post(`${base}/api/listings`, { title: 'Lehenga', category: 'Fashion & Clothing', subCategory: 'Ethnic Wear', condition: 'New', price: 2500, city: 'Jaipur', sellerName: 'Neha' });
+  const made = await post(`${base}/api/admin/products`, { name: 'Lehenga', category: 'Fashion & Clothing', subCategory: 'Ethnic Wear', offers: [offer('Myntra', 2500)] }, H);
   assert.equal(made.status, 201);
 
   // Move up
@@ -111,7 +119,7 @@ test('categories can be edited while the app runs, only with the admin key', () 
   assert.ok(ws.length >= 1);
   tree = await (await send('PATCH', `${base}/api/categories/${fashion.id}`, { name: 'Fashion' }, H)).json();
   const renamed = await (await fetch(`${base}/api/products?category=Fashion`)).json();
-  assert.ok(renamed.length >= 4);
+  assert.equal(renamed.length, 3);
 
   // Delete is refused while in use, allowed when empty
   assert.equal((await send('DELETE', `${base}/api/categories/${ethnic.id}`, null, H)).status, 409);
@@ -178,19 +186,20 @@ test('a database seeded before category sets existed gets only the new set', () 
   assert.ok(!names.includes('Electronics'));
 });
 
-test('three levels: sellers pick a type when the sub-category has types, and admins can edit types', () => withServer(async base => {
+test('three levels: products pick a type when the sub-category has types, and admins can edit types', () => withServer(async base => {
   const H = { 'X-Admin-Key': 'k' };
   const tree = await (await fetch(`${base}/api/categories`)).json();
   const school = tree.find(c => c.name === 'School & Education');
   const music = school.subcategories.find(s => s.name === 'Music');
-  const l = { title: 'Sitar lessons', category: 'School & Education', subCategory: 'Music', condition: 'New', price: 800, city: 'Pune', sellerName: 'Ravi' };
-  assert.equal((await post(`${base}/api/listings`, l)).status, 400);
-  assert.equal((await post(`${base}/api/listings`, { ...l, type: 'Banjo' })).status, 400);
-  const made = await post(`${base}/api/listings`, { ...l, type: 'Sitar' });
+  const l = { name: 'Sitar', category: 'School & Education', subCategory: 'Music', offers: [offer('Amazon.in', 8000)] };
+  const add = body => post(`${base}/api/admin/products`, body, H);
+  assert.equal((await add(l)).status, 400);
+  assert.equal((await add({ ...l, type: 'Banjo' })).status, 400);
+  const made = await add({ ...l, type: 'Sitar' });
   assert.equal(made.status, 201);
   assert.equal((await made.json()).type, 'Sitar');
   // A sub-category without types takes no type.
-  assert.equal((await post(`${base}/api/listings`, { ...l, subCategory: 'Other', type: 'Sitar' })).status, 400);
+  assert.equal((await add({ ...l, subCategory: 'Other', type: 'Sitar' })).status, 400);
 
   let t = await (await post(`${base}/api/categories`, { name: 'Santoor', parentId: music.id }, H)).json();
   const santoor = t.find(c => c.id === school.id).subcategories.find(s => s.id === music.id).types.find(x => x.name === 'Santoor');
@@ -199,8 +208,8 @@ test('three levels: sellers pick a type when the sub-category has types, and adm
 
   const sitar = music.types.find(x => x.name === 'Sitar');
   await send('PATCH', `${base}/api/categories/${sitar.id}`, { name: 'Sitar (Classical)' }, H);
-  const listings = await (await fetch(`${base}/api/listings`)).json();
-  assert.equal(listings.find(x => x.title === 'Sitar lessons').type, 'Sitar (Classical)');
+  const mine = await (await fetch(`${base}/api/admin/products`, { headers: H })).json();
+  assert.equal(mine.find(x => x.name === 'Sitar').type, 'Sitar (Classical)');
   assert.equal((await send('DELETE', `${base}/api/categories/${music.id}`, null, H)).status, 409);
   assert.equal((await send('DELETE', `${base}/api/categories/${santoor.id}`, null, H)).status, 200);
 }, { adminKey: 'k' }));
@@ -222,7 +231,7 @@ test('admin can add, list and delete hand-picked products; catalog.json loads on
   const { loadCatalog } = require('../server/catalog');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
-  seed(db, { purchaseDays: 5 });
+  seed(db);
   const server = createApp(db, { uploadsDir: path.join(dir, 'u'), adminKey: 'k' }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const H = { 'X-Admin-Key': 'k' };
@@ -247,8 +256,9 @@ test('admin can add, list and delete hand-picked products; catalog.json loads on
     await post(`${base}/api/purchases`, { offerId: detail.cheapest.id });
     assert.equal((await send('DELETE', `${base}/api/admin/products/${p.id}`, null, H)).status, 200);
     assert.equal((await (await fetch(`${base}/api/products?q=Spiral`)).json()).length, 0);
-    // Sample products can't be deleted from here.
-    assert.equal((await send('DELETE', `${base}/api/admin/products/1`, null, H)).status, 404);
+    // Products from catalog.json or the store feeds can't be deleted from here.
+    const cat = addProduct(db, { ...product, name: 'From catalog' }, 'catalog');
+    assert.equal((await send('DELETE', `${base}/api/admin/products/${cat.id}`, null, H)).status, 404);
 
     const file = path.join(dir, 'catalog.json');
     fs.writeFileSync(file, JSON.stringify([product, { name: 'Broken', category: 'Nope', offers: [] }]));
@@ -262,6 +272,8 @@ test('admin can add, list and delete hand-picked products; catalog.json loads on
 test('the real catalog.json is valid', () => {
   const { loadCatalog } = require('../server/catalog');
   const db = openDb(':memory:');
-  seed(db, { purchaseDays: 1 });
-  assert.deepEqual(loadCatalog(db).problems, []);
+  seed(db);
+  const r = loadCatalog(db);
+  assert.deepEqual(r.problems, []);
+  assert.ok(db.prepare("SELECT 1 FROM products WHERE name = 'Apple iPhone' AND source = 'catalog'").get());
 });
