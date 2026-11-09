@@ -2,7 +2,8 @@
 // Flipkart doesn't publish when a product was uploaded. Its Delta Feed does list every product
 // added or changed since a version number, so we:
 //   1. on the first run for a category, note the current version and remember the existing
-//      catalogue as "baseline" (not new);
+//      catalogue as "baseline" (not new). The first `catalogPerCategory` in-stock products are also
+//      saved as normal products, so the category shows real Flipkart items right away;
 //   2. on later runs, ask for changes since the saved version. A product id we have never seen
 //      before is a new arrival, dated the moment we first saw it.
 const { saveItem, markBaseline, getState, setState } = require('./save');
@@ -31,7 +32,7 @@ function toItem(p, [category, subCategory]) {
   };
 }
 
-function createFlipkartFeed({ affiliateId, token, categories, fetch = globalThis.fetch, maxBaselinePages = 200, maxDeltaPages = 100 }) {
+function createFlipkartFeed({ affiliateId, token, categories, fetch = globalThis.fetch, maxBaselinePages = 200, maxDeltaPages = 100, catalogPerCategory = 40 }) {
   const headers = { 'Fk-Affiliate-Id': affiliateId, 'Fk-Affiliate-Token': token, Accept: 'application/json' };
   async function get(url) {
     const r = await fetch(url, { headers });
@@ -57,17 +58,23 @@ function createFlipkartFeed({ affiliateId, token, categories, fetch = globalThis
 
       if (!saved) {
         // First time: the whole current catalogue is the baseline.
-        let url = v.get, pages = 0, count = 0;
+        let url = v.get, pages = 0, count = 0, shown = 0;
         while (url && pages++ < maxBaselinePages) {
           const page = await get(url);
-          const ids = productsOf(page).map(p => p.productId).filter(Boolean);
-          markBaseline(db, STORE, ids);
-          count += ids.length;
+          const rest = [];
+          for (const p of productsOf(page)) {
+            if (!p.productId) continue;
+            count++;
+            if (shown < catalogPerCategory && p.inStock !== false && saveItem(db, toItem(p, target), { now, catalog: true }) === 'catalog') shown++;
+            else rest.push(p.productId);
+          }
+          markBaseline(db, STORE, rest);
           url = page.nextUrl || null;
         }
         setState(db, stateKey, { version: latest });
         summary.baseline += count;
-        summary.categories[key] = `baseline of ${count} products saved`;
+        summary.catalog = (summary.catalog || 0) + shown;
+        summary.categories[key] = `baseline of ${count} products, ${shown} added to the catalogue`;
         continue;
       }
 

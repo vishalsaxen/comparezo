@@ -41,11 +41,17 @@ test('Flipkart: first run saves a baseline, later runs add only unseen products 
   const first = await runner.runAll();
   assert.equal(first.results[0].ok, true, first.results[0].error);
   assert.equal(first.results[0].baseline, 1);
+  assert.equal(first.results[0].catalog, 1);
   assert.equal(newArrivals(db).items.length, 0);
+  // The existing range is shown in its category straight away, just not as a new arrival.
+  const old = db.prepare("SELECT p.*, o.price FROM products p JOIN offers o ON o.product_id = p.id WHERE p.name = 'Old phone'").get();
+  assert.equal(old.category, 'Mobiles');
+  assert.equal(old.first_seen_at, null);
   assert.equal(fk.calls[0].headers['Fk-Affiliate-Token'], 'tok');
 
   const second = await runner.runAll();
   assert.equal(second.results[0].new, 1);
+  assert.equal(second.results[0].updated, 1);
   const items = newArrivals(db).items;
   assert.equal(items.length, 1);
   assert.equal(items[0].name, 'Nimbus X 5G');
