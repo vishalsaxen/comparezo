@@ -204,3 +204,16 @@ test('three levels: sellers pick a type when the sub-category has types, and adm
   assert.equal((await send('DELETE', `${base}/api/categories/${music.id}`, null, H)).status, 409);
   assert.equal((await send('DELETE', `${base}/api/categories/${santoor.id}`, null, H)).status, 200);
 }, { adminKey: 'k' }));
+
+test('affiliate.js loads Cuelinks only when a numeric CUELINKS_CID is set', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
+  const run = async cid => {
+    const server = createApp(openDb(':memory:'), { uploadsDir: path.join(dir, 'u'), cuelinksCid: cid }).listen(0);
+    try { return await (await fetch(`http://127.0.0.1:${server.address().port}/affiliate.js`)).text(); } finally { server.close(); }
+  };
+  try {
+    assert.match(await run('123456'), /var cId = '123456'[\s\S]*cdn0\.cuelinks\.com\/js\/cuelinksv2\.js/);
+    assert.doesNotMatch(await run(''), /cuelinks/);
+    assert.doesNotMatch(await run("1';alert(1)//"), /alert/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -17,6 +17,6 @@ console.log(connected.length ? `Store feeds connected: ${connected.join(', ')}` 
 for (const [store, why] of Object.entries(notConnected)) console.log(`  ${store}: ${why}`);
 feedRunner.schedule(Number(process.env.FEED_INTERVAL_HOURS) || 6);
 
-createApp(db, { uploadsDir: path.join(DATA_DIR, 'uploads'), adminKey: process.env.ADMIN_KEY || '', feedRunner }).listen(PORT, () => {
+createApp(db, { uploadsDir: path.join(DATA_DIR, 'uploads'), adminKey: process.env.ADMIN_KEY || '', cuelinksCid: (process.env.CUELINKS_CID || '').trim(), feedRunner }).listen(PORT, () => {
   console.log(`Comparezo running at http://localhost:${PORT}`);
 });
