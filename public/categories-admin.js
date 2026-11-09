@@ -19,10 +19,11 @@ async function call(method, url, body) {
   return data;
 }
 
-function row(item, i, list, isSub, parent) {
+function row(item, i, list, level, parent) {
+  const isSub = level > 0;
   const isOther = item.name === 'Other';
   const canUp = i > 0 && !isOther, canDown = i < list.length - 1 && list[i + 1].name !== 'Other' && !isOther;
-  return `<div class="cat-row${isSub ? ' is-sub' : ''}" data-id="${item.id}">
+  return `<div class="cat-row${isSub ? ' is-sub' : ''}${level === 2 ? ' is-type' : ''}" data-id="${item.id}">
     <span class="cat-name">${esc(item.name)}</span>
     ${unlocked ? `<span class="cat-actions">
       <button type="button" class="btn btn-ghost small" data-act="up" ${canUp ? '' : 'disabled'} aria-label="Move ${esc(item.name)} up">↑</button>
@@ -33,12 +34,30 @@ function row(item, i, list, isSub, parent) {
   </div>`;
 }
 
+// Types (sub-sub-categories) sit under a sub-category, folded away so long lists stay tidy.
+function types(s, c) {
+  if (!s.types.length && !unlocked) return '';
+  const open = openTypes.has(s.id) ? ' open' : '';
+  return `<details class="cat-types" data-sub="${s.id}"${open}><summary>${s.types.length ? `${s.types.length} type${s.types.length === 1 ? '' : 's'}` : 'Add types'}</summary>
+    ${s.types.map((t, k) => row(t, k, s.types, 2, `${c.name} › ${s.name}`)).join('')}
+    ${unlocked ? `<form class="add-sub" data-parent="${s.id}">
+      <input maxlength="40" placeholder="Add a type to ${esc(s.name)}" aria-label="New type for ${esc(s.name)}">
+      <button class="btn btn-ghost small" type="submit">Add</button>
+    </form>` : ''}
+  </details>`;
+}
+const openTypes = new Set();
+document.addEventListener('toggle', e => {
+  const d = e.target.closest?.('.cat-types'); if (!d) return;
+  d.open ? openTypes.add(Number(d.dataset.sub)) : openTypes.delete(Number(d.dataset.sub));
+}, true);
+
 function render() {
   $('addForm').hidden = !unlocked;
   $('tree').innerHTML = tree.map((c, i) => `<section class="panel cat-card">
-      ${row(c, i, tree, false)}
+      ${row(c, i, tree, 0)}
       <div class="cat-subs">
-        ${c.subcategories.length ? c.subcategories.map((s, j) => row(s, j, c.subcategories, true, c.name)).join('') : '<p class="sub">No sub-categories yet.</p>'}
+        ${c.subcategories.length ? c.subcategories.map((s, j) => row(s, j, c.subcategories, 1, c.name) + types(s, c)).join('') : '<p class="sub">No sub-categories yet.</p>'}
       </div>
       ${unlocked ? `<form class="add-sub" data-parent="${c.id}">
         <input maxlength="40" placeholder="Add a sub-category to ${esc(c.name)}" aria-label="New sub-category for ${esc(c.name)}">
@@ -78,7 +97,8 @@ $('tree').addEventListener('submit', async e => {
   const f = e.target.closest('.add-sub'); if (!f) return;
   e.preventDefault();
   const input = f.querySelector('input');
-  try { tree = await call('POST', '/api/categories', { name: input.value, parentId: Number(f.dataset.parent) }); render(); say(''); toast('Sub-category added.'); }
+  const isType = !!f.closest('.cat-types');
+  try { tree = await call('POST', '/api/categories', { name: input.value, parentId: Number(f.dataset.parent) }); render(); say(''); toast(isType ? 'Type added.' : 'Sub-category added.'); }
   catch (err) { say(err.message, 'err'); }
 });
 

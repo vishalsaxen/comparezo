@@ -168,6 +168,9 @@ th{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--m
 .cat-name{min-width:0; overflow-wrap:anywhere}
 .cat-actions{display:flex; gap:4px; flex-wrap:wrap}
 .cat-subs{margin-top:4px}
+.cat-types{margin:0 0 6px 24px; font-size:14px}
+.cat-types summary{cursor:pointer; color:var(--brand); font-weight:600; font-size:13px; padding:2px 0}
+.cat-row.is-type{padding-left:8px}
 .btn.small{padding:4px 9px; font-size:12px}
 .btn.danger{color:var(--bad)}
 .add-sub,.rename{display:flex; gap:6px; margin-top:8px}
@@ -198,3 +201,7 @@ footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
 .contact{flex-basis:100%; background:var(--brand-soft); border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; font-size:14px}
 .lcard .row .btn{white-space:nowrap; padding:6px 0; color:var(--brand)}
 .thumb.photo{background:#fff center/contain no-repeat; border:1px solid var(--line)}
+
+/* With many categories, keep each chip row to one line that scrolls sideways. */
+#cats,#subcats,#typecats{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; padding-bottom:4px; -webkit-overflow-scrolling:touch}
+#cats > *,#subcats > *,#typecats > *{flex:none; white-space:nowrap}

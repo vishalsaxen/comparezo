@@ -80,6 +80,7 @@ function openDb(file) {
   for (const table of ['products', 'listings']) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
     if (!cols.includes('sub_category')) db.exec(`ALTER TABLE ${table} ADD COLUMN sub_category TEXT`);
+    if (!cols.includes('type')) db.exec(`ALTER TABLE ${table} ADD COLUMN type TEXT`);  // sub-sub-category
   }
   // Columns for products that come from store feeds.
   const addCols = (table, defs) => {
