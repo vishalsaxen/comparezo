@@ -11,10 +11,24 @@ const feeds = require('./feeds');
 const CONDITIONS = ['New', 'Handmade', 'Like new', 'Used, good'];
 const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
-function createApp(db, { uploadsDir, adminKey = '', feedRunner = feeds.createFeedRunner(db) }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db) }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
+  // Cuelinks turns ordinary store links into commission-earning links when a shopper clicks them.
+  // Set CUELINKS_CID (the number in the JavaScript code from the Cuelinks dashboard) to turn it on.
+  app.get('/affiliate.js', (_req, res) => {
+    res.type('application/javascript').set('Cache-Control', 'public, max-age=300');
+    if (!/^\d{1,12}$/.test(cuelinksCid)) return res.send('// No affiliate network is set up.\n');
+    res.send(`var cId = '${cuelinksCid}';
+(function () {
+  var s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://cdn0.cuelinks.com/js/cuelinksv2.js';
+  document.body.appendChild(s);
+}());
+`);
+  });
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use('/uploads', express.static(uploadsDir));
 
