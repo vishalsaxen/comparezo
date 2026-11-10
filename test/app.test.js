@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '' } = {}) {
+async function withServer(fn, { adminKey = '', deals } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -298,3 +298,34 @@ test('the Firebase-hosted front end can call the API (CORS), other sites cannot'
   assert.equal(r.status, 201);
   assert.equal(r.headers.get('access-control-allow-origin'), 'https://comparezo.web.app');
 }));
+
+const { createDeals } = require('../server/deals');
+test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached, and hidden without a key', async () => {
+  const calls = [];
+  const fakeFetch = async (url, opts) => {
+    calls.push({ url, auth: opts.headers.Authorization });
+    if (url.endsWith('/ping')) return { ok: true, status: 200, json: async () => ({ publisher: { id: 1 } }) };
+    return { ok: true, status: 200, json: async () => ({ offers: [
+      { id: 7, title: 'Flat 20% off shoes', coupon_code: 'RUN20', campaign: { name: 'Myntra' }, affiliate_url: 'https://linksredirect.com/?a=1', end_date: '2099-01-01' },
+      { id: 8, title: 'Old sale', url: 'https://linksredirect.com/?a=2', end_date: '2001-01-01' },
+      { id: 9, title: 'No link' },
+    ] }) };
+  };
+  const deals = createDeals({ apiKey: 'secret', fetch: fakeFetch });
+  const r = await deals.list();
+  assert.equal(calls[0].auth, 'Token secret');
+  assert.match(calls[0].url, /^https:\/\/developers\.cuelinks\.com\/pub_api\/v3\/offers/);
+  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code]), [['Flat 20% off shoes', 'Myntra', 'RUN20']]);
+  await deals.list();
+  assert.equal(calls.length, 1);   // cached
+  assert.deepEqual(await createDeals({ apiKey: '' }).list(), { connected: false, deals: [] });
+
+  await withServer(async base => {
+    const pub = await (await fetch(`${base}/api/deals`)).json();
+    assert.equal(pub.deals.length, 1);
+    assert.ok(!JSON.stringify(pub).includes('secret'));
+    assert.equal((await fetch(`${base}/api/admin/deals/check`)).status, 401);
+    const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();
+    assert.ok(chk.offerFields.includes('coupon_code'));
+  }, { adminKey: 'k', deals });
+});

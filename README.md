@@ -99,6 +99,10 @@ The page lists every product, and **Delete** removes it from the site and the da
 
 Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). The page then loads `/affiliate.js`, which loads Cuelinks' script. When a shopper clicks "Buy on Flipkart", "Buy on Myntra" and so on, Cuelinks turns the link into a commission-earning link for any store you're approved for. Without `CUELINKS_CID`, `/affiliate.js` does nothing.
 
+### Deals and coupons
+
+Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Today's deals" section with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.
+
 ## Buying
 
 "Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself.

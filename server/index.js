@@ -2,6 +2,7 @@ const path = require('node:path');
 const { openDb } = require('./db');
 const { seed } = require('./seed');
 const { createApp, DEFAULT_ORIGINS } = require('./app');
+const { createDeals } = require('./deals');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
@@ -50,11 +51,13 @@ async function main() {
   for (const [store, why] of Object.entries(notConnected)) console.log(`  ${store}: ${why}`);
   feedRunner.schedule(Number(process.env.FEED_INTERVAL_HOURS) || 6);
 
+  console.log(process.env.CUELINKS_API_KEY ? 'Cuelinks deals: connected.' : 'Cuelinks deals: set CUELINKS_API_KEY to show deals.');
   createApp(db, {
     uploadsDir: path.join(DATA_DIR, 'uploads'),
     adminKey: process.env.ADMIN_KEY || '',
     cuelinksCid: (process.env.CUELINKS_CID || '').trim(),
     feedRunner,
+    deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
     onChange: store ? () => store.later() : null,
     // Extra front-end addresses allowed to call the API, comma separated (e.g. a custom domain).
     corsOrigins: [...DEFAULT_ORIGINS, ...(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)],

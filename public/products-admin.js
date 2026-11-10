@@ -123,6 +123,15 @@ async function unlock() {
     $('keyStatus').textContent = err.status === 403 ? 'Adding products is turned off. Set ADMIN_KEY on the server first.' : 'That key is not right.';
   }
 }
+$('checkDeals').addEventListener('click', async () => {
+  $('dealsStatus').textContent = 'Asking Cuelinks…';
+  try {
+    const r = await call('GET', '/api/admin/deals/check');
+    $('dealsStatus').textContent = r.error ? r.error : `Connected. ${r.mapped ? r.mapped.filter(Boolean).length : 0} of ${(r.sample || []).length} sample offers read correctly.`;
+    $('dealsOut').textContent = JSON.stringify({ offerFields: r.offerFields, mapped: r.mapped, sample: r.sample }, null, 2);
+    $('dealsOut').hidden = false;
+  } catch (err) { $('dealsStatus').textContent = err.message; }
+});
 $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('adminKey').value; unlock(); });
 
 (async () => {
