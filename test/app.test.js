@@ -306,23 +306,24 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
     calls.push({ url, auth: opts.headers.Authorization });
     if (url.endsWith('/ping')) return { ok: true, status: 200, json: async () => ({ publisher: { id: 1 } }) };
     return { ok: true, status: 200, json: async () => ({ offers: [
-      { id: 7, title: 'Flat 20% off shoes', coupon_code: 'RUN20', campaign: { name: 'Myntra' }, affiliate_url: 'https://linksredirect.com/?a=1', end_date: '2099-01-01' },
+      { id: 7, title: 'Flat 20% off shoes', coupon_code: 'RUN20', campaign: { name: 'Myntra' }, affiliate_url: 'https://linksredirect.com/?cid=1&source=api&url=https%3A%2F%2Fwww.myntra.com%2Fshoes%3Fx%3D1%26y%3D2', end_date: '2099-01-01' },
       { id: 8, title: 'Old sale', url: 'https://linksredirect.com/?a=2', end_date: '2001-01-01' },
       { id: 9, title: 'No link' },
+      { id: 10, title: 'Raw link', url: 'https://linksredirect.com/?cid=1&source=api&url=https://www.airindia.com/?ai_pc=W&utm_medium=affiliate' },
     ] }) };
   };
   const deals = createDeals({ apiKey: 'secret', fetch: fakeFetch });
   const r = await deals.list();
   assert.equal(calls[0].auth, 'Token secret');
   assert.match(calls[0].url, /^https:\/\/developers\.cuelinks\.com\/pub_api\/v3\/offers/);
-  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code]), [['Flat 20% off shoes', 'Myntra', 'RUN20']]);
+  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code, d.url]), [['Flat 20% off shoes', 'Myntra', 'RUN20', 'https://www.myntra.com/shoes?x=1&y=2'], ['Raw link', '', null, 'https://www.airindia.com/?ai_pc=W&utm_medium=affiliate']]);
   await deals.list();
   assert.equal(calls.length, 1);   // cached
   assert.deepEqual(await createDeals({ apiKey: '' }).list(), { connected: false, deals: [] });
 
   await withServer(async base => {
     const pub = await (await fetch(`${base}/api/deals`)).json();
-    assert.equal(pub.deals.length, 1);
+    assert.equal(pub.deals.length, 2);
     assert.ok(!JSON.stringify(pub).includes('secret'));
     assert.equal((await fetch(`${base}/api/admin/deals/check`)).status, 401);
     const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();
