@@ -41,6 +41,14 @@ async function api(url, opts) {
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200); }
 
+// Links to Cuelinks itself have no href, so the Cuelinks script on the page doesn't rewrite them
+// into commission links (which sends you to cuelinks.com/broken-links). They open on click instead.
+document.querySelectorAll('a[data-open]').forEach(a => {
+  a.style.cursor = 'pointer'; a.style.textDecoration = 'underline';
+  const go = () => window.open(a.dataset.open, '_blank', 'noopener');
+  a.addEventListener('click', go);
+  a.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+});
 /* ---------- Tabs ---------- */
 let linezoLoaded = false;
 // Linezo is only for the owner: the tabs show only in a browser that has the admin key.
