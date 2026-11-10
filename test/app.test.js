@@ -305,6 +305,11 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
   const fakeFetch = async (url, opts) => {
     calls.push({ url, auth: opts.headers.Authorization });
     if (url.endsWith('/ping')) return { ok: true, status: 200, json: async () => ({ publisher: { id: 1 } }) };
+    if (/[?&]page=2\b/.test(url)) return { ok: true, status: 200, json: async () => ({ offers: [
+      { id: 11, title: 'Page two deal', url: 'https://www.ajio.com/sale' },
+      { id: 7, title: 'Flat 20% off shoes', url: 'https://www.myntra.com/x' },   // repeated, ignored
+    ] }) };
+    if (/[?&]page=[3-9]/.test(url)) return { ok: true, status: 200, json: async () => ({ offers: [] }) };
     return { ok: true, status: 200, json: async () => ({ offers: [
       { id: 7, title: 'Flat 20% off shoes', coupon_code: 'RUN20', campaign: { name: 'Myntra' }, affiliate_url: 'https://linksredirect.com/?cid=1&source=api&url=https%3A%2F%2Fwww.myntra.com%2Fshoes%3Fx%3D1%26y%3D2', end_date: '2099-01-01' },
       { id: 8, title: 'Old sale', url: 'https://linksredirect.com/?a=2', end_date: '2001-01-01' },
@@ -316,14 +321,15 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
   const r = await deals.list();
   assert.equal(calls[0].auth, 'Token secret');
   assert.match(calls[0].url, /^https:\/\/developers\.cuelinks\.com\/pub_api\/v3\/offers/);
-  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code, d.url]), [['Flat 20% off shoes', 'Myntra', 'RUN20', 'https://www.myntra.com/shoes?x=1&y=2'], ['Raw link', '', null, 'https://www.airindia.com/?ai_pc=W&utm_medium=affiliate']]);
+  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code, d.url]), [['Flat 20% off shoes', 'Myntra', 'RUN20', 'https://www.myntra.com/shoes?x=1&y=2'], ['Raw link', '', null, 'https://www.airindia.com/?ai_pc=W&utm_medium=affiliate'], ['Page two deal', '', null, 'https://www.ajio.com/sale']]);
+  assert.equal(calls.length, 3);   // pages 1 and 2 had deals, page 3 was empty
   await deals.list();
-  assert.equal(calls.length, 1);   // cached
+  assert.equal(calls.length, 3);   // cached
   assert.deepEqual(await createDeals({ apiKey: '' }).list(), { connected: false, deals: [] });
 
   await withServer(async base => {
     const pub = await (await fetch(`${base}/api/deals`)).json();
-    assert.equal(pub.deals.length, 2);
+    assert.equal(pub.deals.length, 3);
     assert.ok(!JSON.stringify(pub).includes('secret'));
     assert.equal((await fetch(`${base}/api/admin/deals/check`)).status, 401);
     const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();

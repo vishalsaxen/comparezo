@@ -177,7 +177,7 @@ async function loadNewArrivals() {
 /* ---------- Comparezo: deals from Cuelinks ---------- */
 async function loadDeals() {
   const data = await api('/api/deals');
-  $('dealGrid').innerHTML = data.deals.slice(0, 12).map(d => {
+  $('dealGrid').innerHTML = data.deals.map(d => {
     const img = d.image ? `<div class="img" style="background-image:url('${esc(d.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : '';
     const ends = d.endsAt ? ` · ends ${esc(fmtDay(d.endsAt.slice(0, 10)))}` : '';
     const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';

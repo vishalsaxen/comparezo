@@ -50,7 +50,7 @@ function toDeal(o) {
   };
 }
 
-function createDeals({ apiKey = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 50 } = {}) {
+function createDeals({ apiKey = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 50, maxPages = 60 } = {}) {
   let cache = null;   // { at, deals, error }
   const headers = { Authorization: `Token ${apiKey}`, Accept: 'application/json' };
 
@@ -65,9 +65,23 @@ function createDeals({ apiKey = '', fetch = globalThis.fetch, now = () => Date.n
     if (!apiKey) return { connected: false, deals: [] };
     if (!refresh && cache && now() - cache.at < TTL_MS) return { connected: true, deals: cache.deals, error: cache.error };
     try {
-      const body = await get(`/offers?per_page=${perPage}`);
+      // Read every page Cuelinks has. Stop on an empty page, a page with nothing new (some APIs
+      // repeat the last page), the last page named in meta, or maxPages as a safety limit.
       const today = new Date(now()).toISOString().slice(0, 10);
-      const deals = listOf(body).map(toDeal).filter(d => d && !(d.endsAt && d.endsAt.slice(0, 10) < today));
+      const seen = new Set(), deals = [];
+      for (let page = 1; page <= maxPages; page++) {
+        const body = await get(`/offers?per_page=${perPage}&page=${page}`);
+        const raw = listOf(body);
+        let fresh = 0;
+        for (const d of raw.map(toDeal)) {
+          if (!d || seen.has(d.id)) continue;
+          seen.add(d.id); fresh++;
+          if (!(d.endsAt && d.endsAt.slice(0, 10) < today)) deals.push(d);
+        }
+        const meta = (body && (body.meta || body.pagination)) || {};
+        const last = Number(meta.total_pages || meta.last_page || meta.pages);
+        if (!raw.length || !fresh || (last && page >= last) || meta.next_page === null) break;
+      }
       cache = { at: now(), deals };
     } catch (e) {
       // Keep showing the last good list if Cuelinks is down; try again in 5 minutes.
