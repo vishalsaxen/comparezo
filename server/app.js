@@ -7,7 +7,7 @@ const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
 const feeds = require('./feeds');
-const { addProduct } = require('./catalog');
+const { addProduct, deleteProduct } = require('./catalog');
 
 
 function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), onChange = null }) {
@@ -115,7 +115,8 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
 
   // Products the site owner adds by hand: pick a product on a store, paste its link and price.
   // With CUELINKS_CID set, those links earn commission when shoppers click through.
-  const manualProducts = () => db.prepare("SELECT * FROM products WHERE source = 'manual' ORDER BY id DESC LIMIT 200").all()
+  // Lists and deletes every product (added on the admin page, from catalog.json, or from a store feed).
+  const manualProducts = () => db.prepare('SELECT * FROM products ORDER BY id DESC LIMIT 500').all()
     .map(p => ({ ...p, offers: offersFor.all(p.id) }));
   app.get('/api/admin/products', requireAdmin, (_req, res) => res.json(manualProducts()));
   app.post('/api/admin/products', requireAdmin, (req, res) => {
@@ -125,15 +126,9 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   });
   app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
-    const p = db.prepare("SELECT id FROM products WHERE id = ? AND source = 'manual'").get(id);
+    const p = db.prepare('SELECT id FROM products WHERE id = ?').get(id);
     if (!p) return res.status(404).json({ error: 'Product not found.' });
-    db.exec('BEGIN');
-    try {
-      db.prepare('UPDATE purchases SET product_id = NULL WHERE product_id = ?').run(id);  // keep Linezo history
-      db.prepare('DELETE FROM offers WHERE product_id = ?').run(id);
-      db.prepare('DELETE FROM products WHERE id = ?').run(id);
-      db.exec('COMMIT');
-    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    deleteProduct(db, id);   // keeps Linezo history
     res.json({ ok: true });
   });
 

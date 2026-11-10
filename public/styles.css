@@ -210,3 +210,4 @@ footer{border-top:1px solid var(--line); color:var(--muted); font-size:13px}
 .offer-row .field.wide{grid-column:1 / -2}
 @media (max-width:640px){.offer-row{grid-template-columns:1fr 1fr}.offer-row .field.wide{grid-column:1 / -1}}
 .copy-box{width:100%; min-height:160px; font-family:"IBM Plex Mono",monospace; font-size:12px}
+.admin-row{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
