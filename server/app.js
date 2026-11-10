@@ -57,7 +57,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
 
   // Editing categories needs the ADMIN_KEY set on the server, sent as the X-Admin-Key header.
   function requireAdmin(req, res, next) {
-    if (!adminKey) return res.status(403).json({ error: 'Category editing is turned off. Set ADMIN_KEY on the server to turn it on.' });
+    if (!adminKey) return res.status(403).json({ error: 'Admin tools are turned off. Set ADMIN_KEY on the server to turn them on.' });
     const sent = Buffer.from(String(req.get('x-admin-key') || ''));
     const want = Buffer.from(adminKey);
     if (sent.length !== want.length || !crypto.timingSafeEqual(sent, want)) return res.status(401).json({ error: 'Wrong admin key.' });
@@ -155,7 +155,8 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
-  app.get('/api/trends', (req, res) => {
+  // Linezo is the owner's sales tracker, so it needs the admin key too.
+  app.get('/api/trends', requireAdmin, (req, res) => {
     const category = cats.findTop(db, req.query.category) ? req.query.category : null;
     res.json(getTrends(db, { days: req.query.days, category }));
   });

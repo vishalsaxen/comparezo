@@ -5,7 +5,7 @@ Comparezo helps shoppers in India find the cheapest place to buy. One search sho
 The app has two tabs:
 
 - **Comparezo**: search, compare prices, buy where it's cheapest, and sell your own product.
-- **Linezo**: the owner's sales tracker. It counts every "Buy" click: clicks per day with a 7-day average, the value of the clicked items, which stores and categories get the clicks, and the most clicked products. Confirmed orders and commission are in the Cuelinks dashboard. You can filter by 7, 30 or 90 days and by category.
+- **Linezo**: the owner's sales tracker. It is private: the tab only shows in a browser that has the admin key (entered on the Add products page), and `GET /api/trends` needs the `X-Admin-Key` header. It counts every "Buy" click: clicks per day with a 7-day average, the value of the clicked items, which stores and categories get the clicks, and the most clicked products. Confirmed orders and commission are in the Cuelinks dashboard. You can filter by 7, 30 or 90 days and by category.
 
 ## Run it
 
@@ -55,7 +55,7 @@ Render's free server sleeps when nobody visits, and waking it shows Render's own
 - `GET /api/products?q=&category=`: search products, each with its lowest price
 - `GET /api/products/:id?extras=1`: all store offers, the cheapest one, and how much you save
 - `POST /api/purchases` with `{offerId}`: records a Buy click, which feeds Linezo
-- `GET /api/trends?days=30&category=`: the data behind Linezo
+- `GET /api/trends?days=30&category=`: the data behind Linezo (needs the `X-Admin-Key` header)
 - `GET /api/categories`: the category tree, each category with its `subcategories`
 - `POST /api/categories` with `{name, parentId?}`, `PATCH /api/categories/:id` with `{name}` or `{move: "up"|"down"}`, and `DELETE /api/categories/:id`: edit categories. These need the `X-Admin-Key` header.
 

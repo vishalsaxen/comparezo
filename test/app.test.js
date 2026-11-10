@@ -42,6 +42,8 @@ const post = (url, body, headers = {}) => fetch(url, { method: 'POST', headers: 
 const send = (method, url, body, headers = {}) => fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
 
 test('search, compare, click Buy, and see it in Linezo', () => withServer(async base => {
+  const A = { headers: { 'X-Admin-Key': 'k' } };
+  assert.equal((await fetch(`${base}/api/trends?days=7`)).status, 401);   // shoppers can't see Linezo
   const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
   assert.equal(found.length, 1);
   const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
@@ -50,21 +52,21 @@ test('search, compare, click Buy, and see it in Linezo', () => withServer(async 
   assert.ok(detail.offers.every(o => o.effective >= detail.cheapest.effective));
   assert.equal(detail.localListings, undefined);
 
-  const before = await (await fetch(`${base}/api/trends?days=7`)).json();
+  const before = await (await fetch(`${base}/api/trends?days=7`, A)).json();
   assert.equal(before.daily.length, 7);
   assert.equal(before.totals.units, 0);   // no sample history any more
   assert.equal((await post(`${base}/api/purchases`, { offerId: detail.cheapest.id, quantity: 2 })).status, 201);
   assert.equal((await post(`${base}/api/purchases`, { listingId: 1 })).status, 400);
-  const after = await (await fetch(`${base}/api/trends?days=7`)).json();
+  const after = await (await fetch(`${base}/api/trends?days=7`, A)).json();
   assert.equal(after.totals.units, 2);
   assert.equal(after.totals.revenue, detail.cheapest.effective * 2);
   assert.deepEqual(after.byStore.map(s => s.store), ['Meesho']);
   assert.equal(after.topProducts[0].name, 'Wireless earbuds');
 
-  const homeOnly = await (await fetch(`${base}/api/trends?days=30&category=Home`)).json();
+  const homeOnly = await (await fetch(`${base}/api/trends?days=30&category=Home`, A)).json();
   assert.equal(homeOnly.totals.units, 0);
   assert.equal((await fetch(`${base}/api/listings`)).status, 404);
-}));
+}, { adminKey: 'k' }));
 
 test('Fashion & Clothing has the giazonest sub-categories, and products must pick one', () => withServer(async base => {
   const tree = await (await fetch(`${base}/api/categories`)).json();
