@@ -84,7 +84,9 @@ Defaults for the Flipkart categories and Amazon searches are in `server/feeds/in
 
 Store APIs are hard to get, so you can also add products yourself. Open `/products.html` (linked as "Add products" in the footer) and enter the `ADMIN_KEY`. Fill in a product, its category, and for each store its price and product link. These links earn commission through Cuelinks like any other store link.
 
-With Firestore connected (see above), products added on that page are kept across restarts. Without it they are wiped when the free Render server restarts; in that case click **Copy list** and add the result to `server/catalog.json`. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
+With Firestore connected (see above), products added on that page are kept across restarts. Without it they are wiped when the free Render server restarts; in that case click **Copy list** and add the result to `server/catalog.json`.
+
+The page lists every product, and **Delete** removes it from the site and the database (Linezo keeps its click history). Once you've entered the admin key, product pages on the main site also show a **Delete this product** button in that browser. Products in `server/catalog.json` load on every start, and a product taken out of that file is removed from the site on the next start. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
 
 ## Earning commission with Cuelinks
 

@@ -227,7 +227,7 @@ test('affiliate.js loads Cuelinks only when a numeric CUELINKS_CID is set', asyn
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('admin can add, list and delete hand-picked products; catalog.json loads on start', async () => {
+test('admin can add, list and delete products; catalog.json loads on start', async () => {
   const { loadCatalog } = require('../server/catalog');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
@@ -256,9 +256,11 @@ test('admin can add, list and delete hand-picked products; catalog.json loads on
     await post(`${base}/api/purchases`, { offerId: detail.cheapest.id });
     assert.equal((await send('DELETE', `${base}/api/admin/products/${p.id}`, null, H)).status, 200);
     assert.equal((await (await fetch(`${base}/api/products?q=Spiral`)).json()).length, 0);
-    // Products from catalog.json or the store feeds can't be deleted from here.
+    // Products from catalog.json can be deleted too.
     const cat = addProduct(db, { ...product, name: 'From catalog' }, 'catalog');
+    assert.equal((await send('DELETE', `${base}/api/admin/products/${cat.id}`, null, H)).status, 200);
     assert.equal((await send('DELETE', `${base}/api/admin/products/${cat.id}`, null, H)).status, 404);
+    assert.equal((await (await fetch(`${base}/api/products?q=catalog`)).json()).length, 0);
 
     const file = path.join(dir, 'catalog.json');
     fs.writeFileSync(file, JSON.stringify([product, { name: 'Broken', category: 'Nope', offers: [] }]));
@@ -266,6 +268,9 @@ test('admin can add, list and delete hand-picked products; catalog.json loads on
     assert.equal(first.added, 1);
     assert.equal(first.problems.length, 1);
     assert.equal(loadCatalog(db, file).added, 0);   // not added twice
+    fs.writeFileSync(file, '[]');
+    assert.equal(loadCatalog(db, file).removed, 1);   // taken out of the file, so taken off the site
+    assert.equal(db.prepare("SELECT COUNT(*) AS c FROM products WHERE source = 'catalog'").get().c, 0);
   } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -275,5 +280,4 @@ test('the real catalog.json is valid', () => {
   seed(db);
   const r = loadCatalog(db);
   assert.deepEqual(r.problems, []);
-  assert.ok(db.prepare("SELECT 1 FROM products WHERE name = 'Apple iPhone' AND source = 'catalog'").get());
 });

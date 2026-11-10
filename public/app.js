@@ -30,6 +30,8 @@ const thumb = (cat, image) => /^https:\/\//.test(image || '')
   ? `<div class="thumb photo" style="background-image:url('${esc(image)}')" role="img" aria-label=""></div>`
   : `<div class="thumb" style="background:${catStyle(cat).c}"><svg viewBox="0 0 24 24" aria-hidden="true">${catStyle(cat).i}</svg></div>`;
 const sdot = s => `<span class="sdot" style="background:${STORE_COLORS[s] || '#888'}"></span>`;
+// The admin key saved by the "Add products" page. With it, product pages show a Delete button.
+const adminKey = () => { try { return localStorage.getItem('cz-admin-key') || ''; } catch { return ''; } };
 async function api(url, opts) {
   const r = await fetch(url, opts && opts.body ? { method: 'POST', ...opts, headers: { 'Content-Type': 'application/json', ...opts.headers }, body: JSON.stringify(opts.body) } : opts);
   const data = await r.json().catch(() => ({}));
@@ -113,7 +115,8 @@ function renderDetail() {
           <td>${r.buyUrl ? `<a class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" href="${esc(r.buyUrl)}" target="_blank" rel="noopener noreferrer sponsored" data-buy-offer="${r.id}" data-store="${esc(r.store)}">Buy on ${esc(r.store)} ↗</a>` : '<span class="sub">No link yet</span>'}</td>
         </tr>`; }).join('')}
       </tbody></table></div>
-    <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices can change on the store; check the final price there.</p>`;
+    <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices can change on the store; check the final price there.</p>
+    ${adminKey() ? `<p class="admin-row"><button type="button" class="btn btn-ghost small danger" data-del-product="${p.id}">Delete this product</button> <span class="sub">Only you see this, because this browser has the admin key.</span></p>` : ''}`;
 }
 
 $('searchForm').addEventListener('submit', e => { e.preventDefault(); state.q = $('q').value.trim(); loadProducts(); });
@@ -129,6 +132,16 @@ $('detail').addEventListener('click', async e => {
   if (s) { state.sort = s.dataset.sort; renderDetail(); return; }
   // "Buy on <store>" is a real link, so the browser opens the store in a new tab.
   // We record the click for Linezo in the background without blocking it.
+  const del = e.target.closest('[data-del-product]');
+  if (del) {
+    if (del.dataset.confirm !== '1') { del.dataset.confirm = '1'; del.textContent = 'Click again to delete'; return; }
+    try {
+      await api(`/api/admin/products/${del.dataset.delProduct}`, { method: 'DELETE', headers: { 'X-Admin-Key': adminKey() } });
+      toast(`Deleted ${state.detail.product.name}.`);
+      state.sel = null; loadProducts();
+    } catch (err) { toast(err.message === 'Request failed' ? 'Could not delete. Check the admin key on the Add products page.' : err.message); }
+    return;
+  }
   const a = e.target.closest('a[data-buy-offer]');
   if (a) {
     recordPurchase({ offerId: Number(a.dataset.buyOffer) });

@@ -5,8 +5,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
 const STORES = ['Amazon.in', 'Flipkart', 'Myntra', 'Meesho', 'Ajio', 'Nykaa', 'JioMart', 'Tata CLiQ', 'Croma', 'Reliance Digital', 'BigBasket', 'Snapdeal', 'FirstCry', 'Pepperfry'];
 const keyStore = {
-  get() { try { return sessionStorage.getItem('cz-admin-key') || ''; } catch { return ''; } },
-  set(v) { try { sessionStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
+  get() { try { return localStorage.getItem('cz-admin-key') || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
 };
 let key = keyStore.get(), tree = [];
 

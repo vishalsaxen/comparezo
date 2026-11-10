@@ -3,8 +3,8 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
-  get() { try { return sessionStorage.getItem('cz-admin-key') || ''; } catch { return ''; } },
-  set(v) { try { sessionStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
+  get() { try { return localStorage.getItem('cz-admin-key') || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
 };
 let key = store.get(), unlocked = false, tree = [];
 

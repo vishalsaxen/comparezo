@@ -48,10 +48,27 @@ function addProduct(db, b = {}, source) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-// Load server/catalog.json, skipping products already loaded. Returns { added, problems }.
+// Delete a product and its store prices. Linezo keeps the click history without the product link.
+function deleteProduct(db, id) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE purchases SET product_id = NULL WHERE product_id = ?').run(id);
+    db.prepare('DELETE FROM offers WHERE product_id = ?').run(id);
+    db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
+// Load server/catalog.json, skipping products already loaded, and remove catalog products
+// that were taken out of the file. Returns { added, removed, problems }.
 function loadCatalog(db, file = path.join(__dirname, 'catalog.json')) {
-  if (!fs.existsSync(file)) return { added: 0, problems: [] };
+  if (!fs.existsSync(file)) return { added: 0, removed: 0, problems: [] };
   const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const names = new Set(list.map(item => String(item.name || '').trim()));
+  let removed = 0;
+  for (const p of db.prepare("SELECT id, name FROM products WHERE source = 'catalog'").all()) {
+    if (!names.has(p.name)) { deleteProduct(db, p.id); removed++; }
+  }
   const has = db.prepare("SELECT 1 FROM products WHERE source = 'catalog' AND name = ?");
   let added = 0;
   const problems = [];
@@ -61,7 +78,7 @@ function loadCatalog(db, file = path.join(__dirname, 'catalog.json')) {
     if (r.errors) problems.push(`${item.name || '(no name)'}: ${r.errors.join(' ')}`);
     else added++;
   }
-  return { added, problems };
+  return { added, removed, problems };
 }
 
-module.exports = { addProduct, loadCatalog };
+module.exports = { addProduct, deleteProduct, loadCatalog };

@@ -32,6 +32,7 @@ async function main() {
   seed(db);
   const catalog = loadCatalog(db);
   if (catalog.added) console.log(`Loaded ${catalog.added} products from catalog.json.`);
+  if (catalog.removed) console.log(`Removed ${catalog.removed} products that are no longer in catalog.json.`);
   for (const p of catalog.problems) console.warn(`catalog.json: ${p}`);
   if (!process.env.ADMIN_KEY) console.log('ADMIN_KEY is not set, so categories cannot be edited.');
 
