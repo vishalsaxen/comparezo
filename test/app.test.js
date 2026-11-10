@@ -281,3 +281,18 @@ test('the real catalog.json is valid', () => {
   const r = loadCatalog(db);
   assert.deepEqual(r.problems, []);
 });
+
+test('the Firebase-hosted front end can call the API (CORS), other sites cannot', () => withServer(async base => {
+  const pre = await fetch(`${base}/api/admin/products`, { method: 'OPTIONS', headers: { Origin: 'https://comparezo.web.app', 'Access-Control-Request-Method': 'DELETE', 'Access-Control-Request-Headers': 'x-admin-key' } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), 'https://comparezo.web.app');
+  assert.match(pre.headers.get('access-control-allow-headers'), /X-Admin-Key/);
+  const other = await fetch(`${base}/api/categories`, { headers: { Origin: 'https://evil.example' } });
+  assert.equal(other.headers.get('access-control-allow-origin'), null);
+  // Buy clicks arrive as text/plain JSON.
+  const [p] = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+  const d = await (await fetch(`${base}/api/products/${p.id}`)).json();
+  const r = await fetch(`${base}/api/purchases`, { method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: 'https://comparezo.web.app' }, body: JSON.stringify({ offerId: d.cheapest.id }) });
+  assert.equal(r.status, 201);
+  assert.equal(r.headers.get('access-control-allow-origin'), 'https://comparezo.web.app');
+}));

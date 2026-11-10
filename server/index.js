@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { openDb } = require('./db');
 const { seed } = require('./seed');
-const { createApp } = require('./app');
+const { createApp, DEFAULT_ORIGINS } = require('./app');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
@@ -56,6 +56,8 @@ async function main() {
     cuelinksCid: (process.env.CUELINKS_CID || '').trim(),
     feedRunner,
     onChange: store ? () => store.later() : null,
+    // Extra front-end addresses allowed to call the API, comma separated (e.g. a custom domain).
+    corsOrigins: [...DEFAULT_ORIGINS, ...(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)],
   }).listen(PORT, () => {
     console.log(`Comparezo running at http://localhost:${PORT}`);
   });
