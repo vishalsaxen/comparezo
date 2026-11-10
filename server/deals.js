@@ -17,8 +17,24 @@ function listOf(body) {
   return [];
 }
 
+// Cuelinks offer links are linksredirect.com/?cid=…&url=<store page>. Those redirects showed
+// "this link is broken" for shoppers, so we link to the store page itself. The Cuelinks script on
+// the page (CUELINKS_CID) turns it into a commission link when it is clicked, like the Buy buttons.
+function storeUrl(u) {
+  try {
+    const x = new URL(u);
+    if (/(^|\.)linksredirect\.com$/.test(x.hostname)) {
+      // The store link may come encoded, or raw with its own & parameters (then it runs to the end).
+      const m = x.search.match(/[?&]url=(https?:\/\/.*)$/);
+      return https(m ? m[1] : x.searchParams.get('url')) || u;
+    }
+  } catch { /* not a URL */ }
+  return u;
+}
+
 function toDeal(o) {
-  const url = https(pick(o, 'affiliate_url', 'tracking_url', 'tracking_link', 'url', 'link', 'offer_url', 'landing_url'));
+  const tracked = https(pick(o, 'affiliate_url', 'tracking_url', 'tracking_link', 'url', 'link', 'offer_url', 'landing_url'));
+  const url = tracked && https(storeUrl(tracked));
   const title = pick(o, 'title', 'name', 'offer_title', 'description');
   if (!url || !title) return null;
   const ends = pick(o, 'end_date', 'ends_at', 'expiry_date', 'expires_at', 'valid_till', 'end_at');
