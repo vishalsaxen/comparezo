@@ -43,8 +43,11 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 
 /* ---------- Tabs ---------- */
 let linezoLoaded = false;
+// Linezo is only for the owner: the tabs show only in a browser that has the admin key.
 function route() {
-  const tab = location.hash === '#linezo' ? 'linezo' : 'compare';
+  const owner = !!adminKey();
+  $('tabs').hidden = !owner;
+  const tab = owner && location.hash === '#linezo' ? 'linezo' : 'compare';
   $('view-compare').hidden = tab !== 'compare';
   $('view-linezo').hidden = tab !== 'linezo';
   $('tab-compare').setAttribute('aria-selected', tab === 'compare');
@@ -177,7 +180,13 @@ async function loadTrends() {
   document.querySelectorAll('#lzRange button').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.days) === lz.days));
   const p = new URLSearchParams({ days: lz.days });
   if (lz.category) p.set('category', lz.category);
-  const t = await api('/api/trends?' + p);
+  let t;
+  try { t = await api('/api/trends?' + p, { headers: { 'X-Admin-Key': adminKey() } }); }
+  catch (err) {
+    $('lzKpis').innerHTML = `<div class="empty">Linezo is only for the owner. ${esc(err.message)} Enter the admin key again on the <a href="/products.html">Add products</a> page.</div>`;
+    linezoLoaded = false;
+    return;
+  }
   renderKpis(t); renderChart(t); renderBars(t); renderTop(t);
 }
 function delta(v) {
