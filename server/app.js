@@ -8,12 +8,13 @@ const { getTrends } = require('./trends');
 const cats = require('./categories');
 const feeds = require('./feeds');
 const { addProduct, deleteProduct } = require('./catalog');
+const { createDeals } = require('./deals');
 
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -154,6 +155,14 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   });
   app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
+
+  // Deals and coupons from Cuelinks (needs CUELINKS_API_KEY on the server).
+  app.get('/api/deals', async (_req, res) => {
+    const r = await deals.list();
+    res.json({ connected: r.connected, deals: r.deals });
+  });
+  app.get('/api/admin/deals/check', requireAdmin, async (_req, res) => res.json(await deals.check()));
+  app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
 
   // Linezo is the owner's sales tracker, so it needs the admin key too.
   app.get('/api/trends', requireAdmin, (req, res) => {

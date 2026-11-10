@@ -174,6 +174,17 @@ async function loadNewArrivals() {
   // Only show the section once a store feed is connected and has something new.
   $('new').hidden = !data.items.length;
 }
+/* ---------- Comparezo: deals from Cuelinks ---------- */
+async function loadDeals() {
+  const data = await api('/api/deals');
+  $('dealGrid').innerHTML = data.deals.slice(0, 12).map(d => {
+    const img = d.image ? `<div class="img" style="background-image:url('${esc(d.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : '';
+    const ends = d.endsAt ? ` · ends ${esc(fmtDay(d.endsAt.slice(0, 10)))}` : '';
+    const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';
+    return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc(d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
+  }).join('');
+  $('deals').hidden = !data.deals.length;
+}
 /* ---------- Linezo: trends ---------- */
 const lz = { days: 30, category: '' };
 async function loadTrends() {
@@ -308,7 +319,7 @@ window.addEventListener('focus', () => loadCategories().then(changed => { if (ch
   await window.czReady;   // the gate stays down until the server is awake (gate.js)
   await loadCategories();
   route();
-  await Promise.all([loadProducts(), loadNewArrivals().catch(() => {})]);
+  await Promise.all([loadProducts(), loadNewArrivals().catch(() => {}), loadDeals().catch(() => {})]);
   window.czOpenGate();
 })().catch(err => {
   $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`;
