@@ -10,10 +10,15 @@ const feeds = require('./feeds');
 const { addProduct } = require('./catalog');
 
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db) }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), onChange = null }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
+  // Tell the caller after every request that changed data, so it can be saved (see firestore-sync.js).
+  if (onChange) app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') res.on('finish', () => { if (res.statusCode < 400) onChange(); });
+    next();
+  });
   // Cuelinks turns ordinary store links into commission-earning links when a shopper clicks them.
   // Set CUELINKS_CID (the number in the JavaScript code from the Cuelinks dashboard) to turn it on.
   app.get('/affiliate.js', (_req, res) => {

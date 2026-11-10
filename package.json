@@ -18,7 +18,8 @@
   },
   "homepage": "https://github.com/vishalsaxen/comparezo#readme",
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "firebase-admin": "^13.10.0"
   },
   "private": true,
   "engines": {

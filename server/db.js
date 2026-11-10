@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS categories (
   parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,  -- NULL for a top-level category
   position INTEGER NOT NULL DEFAULT 0
 );
+-- Which starting category sets were added (see server/categories.js). Created here too so a restore from Firestore can fill it.
+CREATE TABLE IF NOT EXISTS category_sets (name TEXT PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime('now')));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(COALESCE(parent_id, 0), name COLLATE NOCASE);
 -- Every store product id a feed has ever shown us, with the time we first saw it.
 -- This is how "new arrivals" works: stores don't publish upload dates, so we track first sight.
