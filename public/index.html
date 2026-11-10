@@ -9,6 +9,22 @@
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+<!-- Shop-shutter gate: shows while the server wakes up, then rolls up (see gate.js). -->
+<div id="gate" class="gate" role="status" aria-live="polite">
+  <div class="gate-shutter" aria-hidden="true"></div>
+  <div class="gate-awning" aria-hidden="true"></div>
+  <div class="gate-center">
+    <div class="gate-sign">
+      <svg width="40" height="40" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#0f5a4f"/><path d="M8 18l4-5 3 3 5-7" stroke="#f2a516" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Comparezo</span>
+    </div>
+    <div class="gate-tag" aria-hidden="true"><span>₹</span></div>
+    <p class="gate-status" id="gateStatus">Unlocking the shutter…</p>
+    <div class="gate-handle" aria-hidden="true"></div>
+  </div>
+</div>
+<script>document.documentElement.classList.add('gated');</script>
+<script src="/gate.js"></script>
 <header class="top">
   <div class="wrap top-row">
     <a class="logo" href="#compare" aria-label="Comparezo home">
@@ -87,6 +103,5 @@
 <footer><div class="wrap foot">Comparezo. Comparezo may earn a commission when you buy through store links, at no extra cost to you. · <a href="/categories.html">Manage categories</a> · <a href="/products.html">Add products</a></div></footer>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/app.js"></script>
-<script src="/affiliate.js" defer></script>
 </body>
 </html>

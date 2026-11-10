@@ -10,10 +10,25 @@ const feeds = require('./feeds');
 const { addProduct, deleteProduct } = require('./catalog');
 
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), onChange = null }) {
+// Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
+const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com'];
+
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
-  app.use(express.json({ limit: '5mb' }));
+  // The front end can also be served from Firebase Hosting, which calls this API from another address.
+  const allowed = new Set(corsOrigins);
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && allowed.has(origin)) {
+      res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE', 'Access-Control-Max-Age': '600' });
+      if (req.method === 'OPTIONS') return res.sendStatus(204);
+    }
+    next();
+  });
+  // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
+  app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
   // Tell the caller after every request that changed data, so it can be saved (see firestore-sync.js).
   if (onChange) app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') res.on('finish', () => { if (res.statusCode < 400) onChange(); });
@@ -148,4 +163,4 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, DEFAULT_ORIGINS };

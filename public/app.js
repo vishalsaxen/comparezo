@@ -150,7 +150,7 @@ $('detail').addEventListener('click', async e => {
   }
 });
 function recordPurchase(body) {
-  fetch('/api/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true })
+  fetch('/api/purchases', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), keepalive: true })
     .then(r => { if (r.ok) linezoLoaded = false; }).catch(() => {});
 }
 $('detail').addEventListener('change', e => { if (e.target.id === 'extras') { state.extras = e.target.checked; loadDetail(); } });
@@ -296,8 +296,13 @@ window.addEventListener('focus', () => loadCategories().then(changed => { if (ch
 
 /* ---------- Boot ---------- */
 (async () => {
+  await window.czReady;   // the gate stays down until the server is awake (gate.js)
   await loadCategories();
   route();
   await Promise.all([loadProducts(), loadNewArrivals().catch(() => {})]);
-})().catch(err => { $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`; });
+  window.czOpenGate();
+})().catch(err => {
+  $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`;
+  window.czOpenGate(`The shop could not open: ${err.message}. Please refresh the page.`);
+});
 })();

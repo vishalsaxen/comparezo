@@ -1,0 +1,11 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["**/.*"],
+    "cleanUrls": false,
+    "headers": [
+      { "source": "**/*.@(js|css)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }] },
+      { "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    ]
+  }
+}
