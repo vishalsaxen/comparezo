@@ -1,9 +1,8 @@
 // Hand-picked products: each one has a name, a category and the store links and prices for it.
 // They come from two places:
-//   - the admin page /products.html (source 'manual'), which is wiped when the free Render
-//     server restarts, and
+//   - the admin page /products.html (source 'manual'), kept across restarts when Firestore is
+//     connected (see firestore-sync.js), and
 //   - server/catalog.json (source 'catalog'), which is saved in the code and loaded on every start.
-// To keep products added on the admin page, use "Copy list" there and add the result to catalog.json.
 const fs = require('node:fs');
 const path = require('node:path');
 const cats = require('./categories');

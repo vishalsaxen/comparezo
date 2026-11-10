@@ -19,6 +19,20 @@ npm test
 
 On first start the app creates `data/comparezo.db` with the categories, then loads the products in `server/catalog.json`. There is no sample data. Delete the `data/` folder to start fresh. You can set `PORT` and `DATA_DIR` to change the port and data location.
 
+## Saving data in Firebase Firestore
+
+Render's free plan wipes the disk on every restart. To keep products, categories and Linezo clicks, connect Firestore (free on Firebase's Spark plan):
+
+1. In the [Firebase console](https://console.firebase.google.com), create a project and open **Build → Firestore Database → Create database** (production mode, location `asia-southeast1` to sit next to the Render server).
+2. **Project settings → Service accounts → Generate new private key** downloads a JSON key file. Keep it private and never commit it.
+3. On Render, add an environment variable `FIREBASE_SERVICE_ACCOUNT` whose value is the whole JSON file (base64 of it also works). Locally you can instead set `GOOGLE_APPLICATION_CREDENTIALS` to the file's path.
+
+How it works (`server/firestore-sync.js`): the app still uses SQLite while running. On start it copies every table from Firestore into SQLite. After any request that changes data (and every 5 minutes, and on shutdown) it writes only the rows that changed to Firestore, and deletes rows that were removed. Each table is a sub-collection under the document `comparezo/main` (change it with `FIRESTORE_ROOT`, e.g. `comparezo/dev` for testing). The first start with an empty Firestore uploads everything, about 290 writes.
+
+If Firestore can't be read on start (for example a wrong key), the app still starts but saving is turned off, so it can never overwrite good data with an empty database. Check the Render logs for a line starting with `Firestore`.
+
+Spark limits are 20,000 writes and 50,000 reads a day. Each restart reads every row once, and each Buy click is one write. If store feeds are turned on later, their `feed_seen` history can be large, so watch the usage page in Firebase.
+
 ## How it fits together
 
 | Part | Where | What it does |
@@ -64,13 +78,13 @@ Stores don't publish an "uploaded on" date, so a product's arrival date is its s
 | Amazon.in | Creators API (replaced PA-API 5 in 2026) `searchItems` sorted by `NewestArrivals`, using `releaseDate` when present | `AMAZON_CREATORS_CLIENT_ID`, `AMAZON_CREATORS_CLIENT_SECRET`, `AMAZON_PARTNER_TAG`, optional `AMAZON_SEARCHES` (JSON list), `AMAZON_TOKEN_URL`, `AMAZON_API_BASE`, `AMAZON_MARKETPLACE` |
 | Meesho | No public product or affiliate API, so not connected | none |
 
-Defaults for the Flipkart categories and Amazon searches are in `server/feeds/index.js`. The "first seen" history lives in the database, so the app needs storage that survives restarts for these dates to be right.
+Defaults for the Flipkart categories and Amazon searches are in `server/feeds/index.js`. The "first seen" history lives in the database, so connect Firestore for these dates to survive restarts.
 
 ## Adding products by hand
 
 Store APIs are hard to get, so you can also add products yourself. Open `/products.html` (linked as "Add products" in the footer) and enter the `ADMIN_KEY`. Fill in a product, its category, and for each store its price and product link. These links earn commission through Cuelinks like any other store link.
 
-On the free Render plan the database is wiped on restart, so products added on that page don't last. To keep them, click **Copy list** and add the result to `server/catalog.json`. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
+With Firestore connected (see above), products added on that page are kept across restarts. Without it they are wiped when the free Render server restarts; in that case click **Copy list** and add the result to `server/catalog.json`. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
 
 ## Earning commission with Cuelinks
 
@@ -80,4 +94,4 @@ Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard �
 
 "Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself.
 
-Each of those clicks is counted in Linezo. On the free Render plan the click history is wiped when the server restarts. Confirmed orders come from Cuelinks' own reports.
+Each of those clicks is counted in Linezo. Without Firestore connected, the click history is wiped when the free Render server restarts. Confirmed orders come from Cuelinks' own reports.
