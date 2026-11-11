@@ -64,6 +64,15 @@ function route() {
   if (tab === 'linezo' && !linezoLoaded) { linezoLoaded = true; loadTrends(); }
 }
 window.addEventListener('hashchange', route);
+// Log out: forget the admin key in this browser, hide Linezo and go back to Comparezo.
+// To log in again, enter the key on the Add products page.
+$('lzLogout').addEventListener('click', () => {
+  try { localStorage.removeItem('cz-admin-key'); } catch { /* private mode */ }
+  linezoLoaded = false;
+  if (location.hash === '#linezo') history.replaceState(null, '', '#compare');
+  route();
+  toast('Logged out of Linezo. Enter your admin key on Add products to log in again.');
+});
 
 /* ---------- Comparezo: search + compare ---------- */
 const state = { q: '', cat: null, sub: null, type: null, sel: null, sort: 'eff', extras: true, products: [], detail: null };
