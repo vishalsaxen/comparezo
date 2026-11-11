@@ -200,6 +200,7 @@ async function loadDeals() {
     const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';
     return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc(d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
   }).join('');
+  $('dealCount').textContent = data.deals.length.toLocaleString('en-IN');
   $('deals').hidden = !data.deals.length;
 }
 /* ---------- Linezo: trends ---------- */
