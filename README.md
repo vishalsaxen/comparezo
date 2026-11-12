@@ -37,7 +37,7 @@ Spark limits are 20,000 writes and 50,000 reads a day. Each restart reads every 
 
 Render's free server sleeps when nobody visits, and waking it shows Render's own black loading page for up to a minute. To hide that, the front end (`public/`) is also published to Firebase Hosting at **https://comparezo.web.app**, which is always on. That page shows a shop-shutter gate (`public/gate.js`) straight away, keeps asking the Render server until it answers, loads the first products, and then rolls the shutter up. On Render itself the same gate shows briefly while products load.
 
-- `gate.js` sends every `/api/...` call to `https://comparezo.onrender.com` when the page isn't on Render or localhost. The server allows those calls from `comparezo.web.app` and `comparezo.firebaseapp.com` (CORS). Add more addresses, such as a custom domain, with `CORS_ORIGINS` (comma separated).
+- `gate.js` sends every `/api/...` call to `https://comparezo.onrender.com` when the page isn't on Render or localhost. The server allows those calls from `comparezo.web.app`, `comparezo.firebaseapp.com` and the custom domain `comparezo.giazonest.com` (CORS). Add more addresses, such as a custom domain, with `CORS_ORIGINS` (comma separated).
 - `.github/workflows/firebase-hosting.yml` publishes `public/` to Firebase Hosting on every push to `main` that changes it. It needs a repository secret `FIREBASE_SERVICE_ACCOUNT` with a service account key for the `comparezo` project. That account needs the **Firebase Hosting Admin**, **Cloud Run Viewer** and **API Keys Viewer** roles.
 
 ## How it fits together
