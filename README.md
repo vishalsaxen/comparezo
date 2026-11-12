@@ -99,6 +99,10 @@ The page lists every product, and **Delete** removes it from the site and the da
 
 Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). The page then loads `/affiliate.js`, which loads Cuelinks' script. When a shopper clicks "Buy on Flipkart", "Buy on Myntra" and so on, Cuelinks turns the link into a commission-earning link for any store you're approved for. Without `CUELINKS_CID`, `/affiliate.js` does nothing.
 
+### Commission links with EarnKaro
+
+Set `EARNKARO_API_KEY` to your EarnKaro API key. "Buy on <store>" then goes through `/api/go/<offer>`, which asks EarnKaro (`server/earnkaro.js`) for your commission link and sends the shopper there. Each link is converted once and remembered. If EarnKaro doesn't support the store or is down, the shopper goes to the plain store link. The key stays on the server.
+
 ### Deals and coupons
 
 Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Number of deals now" section (with the live count) with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.

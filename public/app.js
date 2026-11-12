@@ -132,7 +132,7 @@ function renderDetail() {
           <td class="r num eff">${inr(r.effective)}</td>
           <td>${r.delivery_days === 1 ? 'Tomorrow' : r.delivery_days + ' days'}</td>
           <td>${r.rating ? `<span class="num">${Number(r.rating).toFixed(1)}</span> <span class="sub">/ 5</span>` : '<span class="sub">New</span>'}</td>
-          <td>${r.buyUrl ? `<a class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" href="${esc(r.buyUrl)}" target="_blank" rel="noopener noreferrer sponsored" data-buy-offer="${r.id}" data-store="${esc(r.store)}">Buy on ${esc(r.store)} ↗</a>` : '<span class="sub">No link yet</span>'}</td>
+          <td>${r.buyUrl ? `<a class="btn ${isBest ? 'btn-brand' : 'btn-ghost'} go" href="${esc((r.buyUrl.startsWith('/api/') ? (window.CZ_API || '') : '') + r.buyUrl)}" target="_blank" rel="noopener noreferrer sponsored" data-buy-offer="${r.id}" data-store="${esc(r.store)}">Buy on ${esc(r.store)} ↗</a>` : '<span class="sub">No link yet</span>'}</td>
         </tr>`; }).join('')}
       </tbody></table></div>
     <p class="foot-note">“You pay” = listed price + delivery − coupon. Prices can change on the store; check the final price there.</p>

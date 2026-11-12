@@ -9,12 +9,13 @@ const cats = require('./categories');
 const feeds = require('./feeds');
 const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
+const { createEarnKaro } = require('./earnkaro');
 
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -111,8 +112,17 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     if (!p) return res.status(404).json({ error: 'Product not found' });
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
-    comparison.offers.forEach(o => { o.buyUrl = buyUrl(o, p.name); });
+    // With EarnKaro on, Buy goes through /api/go/<offer>, which swaps in the commission link.
+    comparison.offers.forEach(o => { const u = buyUrl(o, p.name); o.buyUrl = u && earnkaro.connected ? `/api/go/${o.id}` : u; });
     res.json({ product: p, ...comparison, includeExtras });
+  });
+
+  // Sends a shopper to the store through their EarnKaro commission link (or the plain link).
+  app.get('/api/go/:offerId', async (req, res) => {
+    const o = db.prepare('SELECT o.*, p.name AS product_name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.id = ?').get(Number(req.params.offerId));
+    const url = o && buyUrl(o, o.product_name);
+    if (!url) return res.status(404).type('text/plain').send('This store link is no longer available.');
+    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(url));
   });
 
   // Record a Buy click (the shopper is sent to the store). This is what Linezo tracks.

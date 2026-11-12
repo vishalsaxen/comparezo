@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -335,4 +335,44 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
     const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();
     assert.ok(chk.offerFields.includes('coupon_code'));
   }, { adminKey: 'k', deals });
+});
+
+const { createEarnKaro } = require('../server/earnkaro');
+test('EarnKaro: Buy goes through /api/go and redirects to the commission link, falling back to the store link', async () => {
+  const sent = [];
+  const fakeFetch = async (url, opts) => {
+    sent.push({ url, auth: opts.headers.Authorization, body: JSON.parse(opts.body) });
+    const deal = JSON.parse(opts.body).deal;
+    if (deal.includes('meesho')) return { ok: false, status: 400, json: async () => ({ success: 0, message: 'Store not supported' }) };
+    return { ok: true, status: 200, json: async () => ({ success: 1, data: 'Deal: https:\\/\\/ekaro.in\\/enkr2026abc' }) };
+  };
+  const earnkaro = createEarnKaro({ apiKey: 'ek-secret', fetch: fakeFetch });
+  await withServer(async base => {
+    const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+    const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+    const amazon = detail.offers.find(o => o.store === 'Amazon.in');
+    const meesho = detail.offers.find(o => o.store === 'Meesho');
+    assert.equal(amazon.buyUrl, `/api/go/${amazon.id}`);
+    assert.ok(!JSON.stringify(detail).includes('ek-secret'));
+
+    const r = await fetch(`${base}/api/go/${amazon.id}`, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), 'https://ekaro.in/enkr2026abc');
+    assert.equal(sent[0].auth, 'Bearer ek-secret');
+    assert.equal(sent[0].body.convert_option, 'convert_only');
+    assert.match(sent[0].body.deal, /^https:\/\/www\.amazonin\.com\//);
+    await fetch(`${base}/api/go/${amazon.id}`, { redirect: 'manual' });
+    assert.equal(sent.length, 1);   // remembered, not converted again
+
+    const m = await fetch(`${base}/api/go/${meesho.id}`, { redirect: 'manual' });
+    assert.match(m.headers.get('location'), /meesho/);   // not supported: plain store link
+    assert.equal((await fetch(`${base}/api/go/999999`, { redirect: 'manual' })).status, 404);
+  }, { earnkaro });
+
+  // Without a key, Buy links stay the plain store links.
+  await withServer(async base => {
+    const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+    const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+    assert.ok(detail.offers.every(o => o.buyUrl.startsWith('https://')));
+  });
 });
