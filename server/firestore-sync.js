@@ -17,6 +17,7 @@ const TABLES = [
   ['purchases', ['id']],
   ['feed_state', ['key']],
   ['feed_seen', ['store', 'external_id']],
+  ['my_deals', ['id']],
 ];
 
 const docId = (key, row) => key.length === 1 && Number.isInteger(row[key[0]])

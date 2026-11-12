@@ -55,6 +55,23 @@
     <p class="sub">Products are saved in Firebase. Delete removes a product from the site and the database. You can also delete a product from its page on the main site while this browser has the admin key. <strong>Copy list</strong> makes a backup copy.</p>
     <p><button type="button" class="btn btn-ghost small" id="copyList">Copy list</button> <span id="copyStatus" role="status"></span></p>
     <div id="list" class="cat-tree"></div>
+    <h2>Add deal</h2>
+    <p class="sub">Add a deal or coupon you found, for example in the EarnKaro app. Paste the store's own deal page link: with EarnKaro on, the "Get deal" button turns it into your commission link. Deals show at the top of "Number of deals now" and disappear after their end date.</p>
+    <form class="panel pad sell-form" id="dealForm" novalidate>
+      <div class="field full"><label for="d-title">Deal title</label><input id="d-title" maxlength="160" placeholder="e.g. Flat 40% off on running shoes"></div>
+      <div class="field"><label for="d-store">Store</label><input id="d-store" maxlength="60" list="d-stores" placeholder="e.g. Myntra"><datalist id="d-stores"></datalist></div>
+      <div class="field"><label for="d-code">Coupon code (optional)</label><input id="d-code" maxlength="40" placeholder="Leave empty if none"></div>
+      <div class="field full"><label for="d-url">Deal link</label><input id="d-url" inputmode="url" placeholder="https://www.myntra.com/…"></div>
+      <div class="field full"><label for="d-desc">Details (optional)</label><input id="d-desc" maxlength="300" placeholder="e.g. Min. order ₹999, new users only"></div>
+      <div class="field"><label for="d-image">Photo link (optional)</label><input id="d-image" placeholder="https://…"></div>
+      <div class="field"><label for="d-ends">Ends on (optional)</label><input id="d-ends" type="date"></div>
+      <div class="form-actions">
+        <button class="btn btn-brand" type="submit">Add deal</button>
+        <span id="dealFormStatus" role="status"></span>
+      </div>
+    </form>
+    <h2>My deals</h2>
+    <div id="myDeals" class="cat-tree"></div>
     <h2>Cuelinks deals</h2>
     <p><button type="button" class="btn btn-ghost small" id="checkDeals">Check Cuelinks deals</button> <span id="dealsStatus" role="status"></span></p>
     <pre id="dealsOut" hidden style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px"></pre>

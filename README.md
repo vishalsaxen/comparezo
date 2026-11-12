@@ -107,6 +107,8 @@ Set `EARNKARO_API_KEY` to your EarnKaro API key. "Buy on <store>" then goes thro
 
 Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Number of deals now" section (with the live count) with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.
 
+**Your own deals.** EarnKaro has no deals feed, so deals from the EarnKaro app are added by hand under **Add deal** on `/products.html` (title, store, coupon code, link, end date). They are saved in Firebase, show before the Cuelinks deals, and are hidden after their end date. With `EARNKARO_API_KEY` set, "Get deal" goes through `/api/go/deal/<id>` and becomes your EarnKaro link.
+
 ## Buying
 
 "Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself.
