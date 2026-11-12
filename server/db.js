@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS feed_state (
   value TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Deals and coupons the owner adds by hand on /products.html (for example from the EarnKaro app).
+CREATE TABLE IF NOT EXISTS my_deals (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  store TEXT NOT NULL DEFAULT '',
+  code TEXT,
+  url TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  image TEXT,
+  ends_at TEXT,                   -- YYYY-MM-DD, last day the deal works
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;

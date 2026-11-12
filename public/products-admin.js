@@ -111,13 +111,49 @@ $('copyList').addEventListener('click', async () => {
   catch { $('copyStatus').textContent = 'Could not copy. Select and copy the text below.'; $('list').insertAdjacentHTML('afterbegin', `<textarea class="copy-box" readonly>${esc(json)}</textarea>`); }
 });
 
+/* My deals */
+const STORE_HOSTS = { 'amazon.in': 'Amazon.in', 'flipkart.com': 'Flipkart', 'myntra.com': 'Myntra', 'meesho.com': 'Meesho', 'ajio.com': 'Ajio', 'nykaa.com': 'Nykaa', 'jiomart.com': 'JioMart', 'tatacliq.com': 'Tata CLiQ', 'croma.com': 'Croma', 'reliancedigital.in': 'Reliance Digital', 'bigbasket.com': 'BigBasket', 'snapdeal.com': 'Snapdeal', 'firstcry.com': 'FirstCry', 'pepperfry.com': 'Pepperfry' };
+$('d-stores').innerHTML = STORES.map(s => `<option value="${esc(s)}">`).join('');
+$('d-url').addEventListener('change', e => {
+  if ($('d-store').value.trim()) return;
+  const host = (() => { try { return new URL(e.target.value).hostname; } catch { return ''; } })();
+  const hit = Object.keys(STORE_HOSTS).find(d => host === d || host.endsWith('.' + d));
+  if (hit) $('d-store').value = STORE_HOSTS[hit];
+});
+const today = () => new Date().toISOString().slice(0, 10);
+async function loadMyDeals() {
+  const list = await call('GET', '/api/admin/my-deals');
+  $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card"><div class="cat-row">
+      <span class="cat-name">${esc(d.title)} <span class="sub">${d.store ? '· ' + esc(d.store) : ''}${d.code ? ' · code ' + esc(d.code) : ''}</span><br>
+      <span class="sub">${d.ends_at ? (d.ends_at < today() ? 'Ended ' : 'Ends ') + esc(d.ends_at) : 'No end date'} · <a href="${esc(d.url)}" target="_blank" rel="noopener">link</a></span></span>
+      <span class="cat-actions"><button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
+    </div></div>`).join('') : '<p class="sub">No deals added yet.</p>';
+}
+$('dealForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = id => $(id).value.trim();
+  const st = $('dealFormStatus');
+  try {
+    await call('POST', '/api/admin/my-deals', { title: v('d-title'), store: v('d-store'), code: v('d-code'), url: v('d-url'), description: v('d-desc'), image: v('d-image'), endsAt: v('d-ends') });
+    st.className = 'ok'; st.textContent = 'Added. It now shows in "Number of deals now".';
+    for (const id of ['d-title', 'd-store', 'd-code', 'd-url', 'd-desc', 'd-image', 'd-ends']) $(id).value = '';
+    loadMyDeals();
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+});
+$('myDeals').addEventListener('click', async e => {
+  const b = e.target.closest('[data-del-deal]'); if (!b) return;
+  if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to delete'; return; }
+  try { await call('DELETE', `/api/admin/my-deals/${b.dataset.delDeal}`); toast(`Deleted ${b.dataset.name}.`); loadMyDeals(); }
+  catch (err) { toast(err.message); }
+});
+
 /* Unlock */
 async function unlock() {
   try {
     await call('POST', '/api/admin/check');
     keyStore.set(key);
     $('keyForm').hidden = true; $('productForm').hidden = false;
-    loadList();
+    loadList(); loadMyDeals();
   } catch (err) {
     $('keyStatus').className = 'err';
     $('keyStatus').textContent = err.status === 403 ? 'Adding products is turned off. Set ADMIN_KEY on the server first.' : 'That key is not right.';

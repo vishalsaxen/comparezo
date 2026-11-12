@@ -376,3 +376,29 @@ test('EarnKaro: Buy goes through /api/go and redirects to the commission link, f
     assert.ok(detail.offers.every(o => o.buyUrl.startsWith('https://')));
   });
 });
+
+test('owner can add and delete deals by hand; they show first, hide when expired, and go through EarnKaro', async () => {
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => ({ data: 'https://ekaro.in/deal123' }) });
+  const earnkaro = createEarnKaro({ apiKey: 'ek', fetch: fakeFetch });
+  await withServer(async base => {
+    const h = { 'Content-Type': 'application/json', 'X-Admin-Key': 'k' };
+    const post = body => fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: h, body: JSON.stringify(body) });
+    assert.equal((await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
+    const bad = await post({ title: '', url: 'http://x' });
+    assert.equal(bad.status, 400);
+    assert.equal((await bad.json()).errors.length, 2);
+    const added = await (await post({ title: '40% off shoes', store: 'Myntra', code: 'RUN40', url: 'https://www.myntra.com/shoes', endsAt: '2999-01-01' })).json();
+    await post({ title: 'Old deal', url: 'https://www.ajio.com/sale', endsAt: '2000-01-01' });
+
+    const pub = await (await fetch(`${base}/api/deals`)).json();
+    assert.equal(pub.connected, true);
+    assert.deepEqual(pub.deals.map(d => [d.title, d.store, d.code, d.url]), [['40% off shoes', 'Myntra', 'RUN40', `/api/go/deal/${added.id}`]]);
+    const r = await fetch(`${base}${pub.deals[0].url}`, { redirect: 'manual' });
+    assert.equal(r.headers.get('location'), 'https://ekaro.in/deal123');
+
+    assert.equal((await (await fetch(`${base}/api/admin/my-deals`, { headers: h })).json()).length, 2);
+    assert.equal((await fetch(`${base}/api/admin/my-deals/${added.id}`, { method: 'DELETE', headers: h })).status, 200);
+    assert.equal((await (await fetch(`${base}/api/deals`)).json()).deals.length, 0);
+    assert.equal((await fetch(`${base}/api/go/deal/${added.id}`, { redirect: 'manual' })).status, 404);
+  }, { adminKey: 'k', earnkaro });
+});

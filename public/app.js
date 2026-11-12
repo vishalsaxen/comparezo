@@ -191,14 +191,14 @@ async function loadNewArrivals() {
   // Only show the section once a store feed is connected and has something new.
   $('new').hidden = !data.items.length;
 }
-/* ---------- Comparezo: deals from Cuelinks ---------- */
+/* ---------- Comparezo: deals (the owner's own, then Cuelinks) ---------- */
 async function loadDeals() {
   const data = await api('/api/deals');
   $('dealGrid').innerHTML = data.deals.map(d => {
     const img = d.image ? `<div class="img" style="background-image:url('${esc(d.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : '';
     const ends = d.endsAt ? ` · ends ${esc(fmtDay(d.endsAt.slice(0, 10)))}` : '';
     const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';
-    return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc(d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
+    return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc((d.url.startsWith('/api/') ? (window.CZ_API || '') : '') + d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
   }).join('');
   $('dealCount').textContent = data.deals.length.toLocaleString('en-IN');
   $('deals').hidden = !data.deals.length;

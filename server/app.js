@@ -166,10 +166,41 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
-  // Deals and coupons from Cuelinks (needs CUELINKS_API_KEY on the server).
+  // Deals and coupons: the owner's own (added on /products.html) first, then Cuelinks (needs CUELINKS_API_KEY).
+  // Expired own deals are hidden. With EarnKaro on, their links go through /api/go/deal/<id>.
+  const today = () => new Date().toISOString().slice(0, 10);
+  const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
+  const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
+    image: d.image || null, url: earnkaro.connected ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
   app.get('/api/deals', async (_req, res) => {
     const r = await deals.list();
-    res.json({ connected: r.connected, deals: r.deals });
+    const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
+    res.json({ connected: r.connected || mine.length > 0, deals: [...mine, ...r.deals] });
+  });
+  app.get('/api/go/deal/:id', async (req, res) => {
+    const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
+    if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
+    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(d.url));
+  });
+  app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
+  app.post('/api/admin/my-deals', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    const str = (v, n) => String(v ?? '').trim().slice(0, n);
+    const title = str(b.title, 160), url = str(b.url, 2000), image = str(b.image, 2000), endsAt = str(b.endsAt, 10);
+    const errors = [];
+    if (!title) errors.push('Give the deal a title.');
+    if (!/^https:\/\/\S+$/.test(url)) errors.push('Paste the deal link, starting with https://.');
+    if (image && !/^https:\/\/\S+$/.test(image)) errors.push('The photo link must start with https://.');
+    if (endsAt && !/^\d{4}-\d{2}-\d{2}$/.test(endsAt)) errors.push('Pick the end date from the calendar.');
+    if (errors.length) return res.status(400).json({ errors });
+    const r = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(title, str(b.store, 60), str(b.code, 40) || null, url, str(b.description, 300), image || null, endsAt || null);
+    res.status(201).json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(Number(r.lastInsertRowid)));
+  });
+  app.delete('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
+    const r = db.prepare('DELETE FROM my_deals WHERE id = ?').run(Number(req.params.id));
+    if (!r.changes) return res.status(404).json({ error: 'Deal not found.' });
+    res.json({ ok: true });
   });
   app.get('/api/admin/deals/check', requireAdmin, async (_req, res) => res.json(await deals.check()));
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
