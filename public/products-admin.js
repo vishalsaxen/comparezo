@@ -168,6 +168,15 @@ $('checkDeals').addEventListener('click', async () => {
     $('dealsOut').hidden = false;
   } catch (err) { $('dealsStatus').textContent = err.message; }
 });
+$('checkAdmitad').addEventListener('click', async () => {
+  $('admitadStatus').textContent = 'Asking Admitad…';
+  try {
+    const r = await call('GET', '/api/admin/admitad/check');
+    $('admitadStatus').textContent = r.error ? r.error : `Connected. ${r.total ?? 0} coupons for your website; ${r.mapped ? r.mapped.filter(Boolean).length : 0} of ${(r.sample || []).length} samples read correctly.`;
+    $('admitadOut').textContent = JSON.stringify({ mapped: r.mapped, sample: r.sample }, null, 2);
+    $('admitadOut').hidden = !r.sample;
+  } catch (err) { $('admitadStatus').textContent = err.message; }
+});
 $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('adminKey').value; unlock(); });
 
 (async () => {

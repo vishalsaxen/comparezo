@@ -107,6 +107,8 @@ Set `EARNKARO_API_KEY` to your EarnKaro API key. "Buy on <store>" then goes thro
 
 Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Number of deals now" section (with the live count) with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.
 
+**Admitad (Mitgo) deals.** Set `ADMITAD_CLIENT_ID`, `ADMITAD_CLIENT_SECRET` (Admitad → Settings → Credentials) and `ADMITAD_WEBSITE_ID` (your ad space ID). The deals section then also lists live coupons for the stores your website joined in Admitad (`server/admitad.js`, coupons API with scope `coupons_for_website`), refreshed at most once an hour. Their links are Admitad tracking links, so they earn as they are. **Check Admitad deals** on the Add products page shows what Admitad sends.
+
 **Your own deals.** EarnKaro has no deals feed, so deals from the EarnKaro app are added by hand under **Add deal** on `/products.html` (title, store, coupon code, link, end date). They are saved in Firebase, show before the Cuelinks deals, and are hidden after their end date. With `EARNKARO_API_KEY` set, "Get deal" goes through `/api/go/deal/<id>` and becomes your EarnKaro link.
 
 ## Buying

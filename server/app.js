@@ -10,12 +10,13 @@ const feeds = require('./feeds');
 const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
+const { createAdmitad } = require('./admitad');
 
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -166,17 +167,19 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
-  // Deals and coupons: the owner's own (added on /products.html) first, then Cuelinks (needs CUELINKS_API_KEY).
+  // Deals and coupons: the owner's own (added on /products.html), Admitad (ADMITAD_* keys) and Cuelinks (CUELINKS_API_KEY).
   // Expired own deals are hidden. With EarnKaro on, their links go through /api/go/deal/<id>.
   const today = () => new Date().toISOString().slice(0, 10);
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
     image: d.image || null, url: earnkaro.connected ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
+  // Order: the owner's own deals, then Admitad, then Cuelinks.
   app.get('/api/deals', async (_req, res) => {
-    const r = await deals.list();
+    const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    res.json({ connected: r.connected || mine.length > 0, deals: [...mine, ...r.deals] });
+    res.json({ connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals] });
   });
+  app.get('/api/admin/admitad/check', requireAdmin, async (_req, res) => res.json(await admitad.check()));
   app.get('/api/go/deal/:id', async (req, res) => {
     const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
     if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
