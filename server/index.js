@@ -4,6 +4,7 @@ const { seed } = require('./seed');
 const { createApp, DEFAULT_ORIGINS } = require('./app');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
+const { createAdmitad } = require('./admitad');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
@@ -53,6 +54,7 @@ async function main() {
   feedRunner.schedule(Number(process.env.FEED_INTERVAL_HOURS) || 6);
 
   console.log(process.env.CUELINKS_API_KEY ? 'Cuelinks deals: connected.' : 'Cuelinks deals: set CUELINKS_API_KEY to show deals.');
+  console.log(process.env.ADMITAD_CLIENT_ID && process.env.ADMITAD_CLIENT_SECRET && process.env.ADMITAD_WEBSITE_ID ? 'Admitad deals: connected.' : 'Admitad deals: set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to show deals.');
   console.log(process.env.EARNKARO_API_KEY ? 'EarnKaro: Buy links earn commission.' : 'EarnKaro: set EARNKARO_API_KEY to turn Buy links into commission links.');
   createApp(db, {
     uploadsDir: path.join(DATA_DIR, 'uploads'),
@@ -60,6 +62,7 @@ async function main() {
     cuelinksCid: (process.env.CUELINKS_CID || '').trim(),
     feedRunner,
     earnkaro: createEarnKaro({ apiKey: (process.env.EARNKARO_API_KEY || '').trim() }),
+    admitad: createAdmitad({ clientId: (process.env.ADMITAD_CLIENT_ID || '').trim(), clientSecret: (process.env.ADMITAD_CLIENT_SECRET || '').trim(), websiteId: (process.env.ADMITAD_WEBSITE_ID || '').trim() }),
     deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
     onChange: store ? () => store.later() : null,
     // Extra front-end addresses allowed to call the API, comma separated (e.g. a custom domain).

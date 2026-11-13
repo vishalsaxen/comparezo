@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals, earnkaro } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro, admitad } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -401,4 +401,39 @@ test('owner can add and delete deals by hand; they show first, hide when expired
     assert.equal((await (await fetch(`${base}/api/deals`)).json()).deals.length, 0);
     assert.equal((await fetch(`${base}/api/go/deal/${added.id}`, { redirect: 'manual' })).status, 404);
   }, { adminKey: 'k', earnkaro });
+});
+
+const { createAdmitad } = require('../server/admitad');
+test('Admitad deals: signs in once, reads coupons for the website, maps and caches them', async () => {
+  const calls = [];
+  const fakeFetch = async (url, opts = {}) => {
+    calls.push({ url, auth: opts.headers && opts.headers.Authorization, body: opts.body });
+    if (url.endsWith('/token/')) return { ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 604800 }) };
+    return { ok: true, status: 200, json: async () => ({ results: [
+      { id: 1, name: 'Flat 30% off', status: 'active', promocode: 'MYN30', goto_link: 'http://ad.admitad.com/goto/abc/', image: '//cdn.admitad.com/x.png', campaign: { name: 'Myntra' }, date_end: '2999-01-01T23:59:59', description: '<p>On fashion</p>' },
+      { id: 2, name: 'No code sale', status: 'active', promocode: 'NOT REQUIRED', goto_link: 'https://ad.admitad.com/goto/def/', campaign: { name: 'Ajio' }, date_end: null },
+      { id: 3, name: 'Old', status: 'active', goto_link: 'https://ad.admitad.com/goto/old/', date_end: '2000-01-01T00:00:00' },
+    ], _meta: { count: 3, limit: 500, offset: 0 } }) };
+  };
+  const admitad = createAdmitad({ clientId: 'id', clientSecret: 'sec', websiteId: '42', fetch: fakeFetch });
+  const r = await admitad.list();
+  assert.deepEqual(r.deals.map(d => [d.title, d.store, d.code, d.url, d.image, d.description]), [
+    ['Flat 30% off', 'Myntra', 'MYN30', 'https://ad.admitad.com/goto/abc/', 'https://cdn.admitad.com/x.png', 'On fashion'],
+    ['No code sale', 'Ajio', null, 'https://ad.admitad.com/goto/def/', null, ''],
+  ]);
+  assert.equal(calls[0].auth, 'Basic ' + Buffer.from('id:sec').toString('base64'));
+  assert.match(calls[0].body, /scope=coupons_for_website/);
+  assert.equal(calls[1].auth, 'Bearer tok');
+  assert.match(calls[1].url, /\/coupons\/website\/42\/\?limit=500&offset=0$/);
+  await admitad.list();
+  assert.equal(calls.length, 2);   // cached
+  assert.deepEqual(await createAdmitad().list(), { connected: false, deals: [] });
+
+  await withServer(async base => {
+    const pub = await (await fetch(`${base}/api/deals`)).json();
+    assert.equal(pub.connected, true);
+    assert.deepEqual(pub.deals.map(d => d.id), ['admitad-1', 'admitad-2']);
+    assert.ok(!JSON.stringify(pub).includes('sec'));
+    assert.equal((await fetch(`${base}/api/admin/admitad/check`)).status, 401);
+  }, { adminKey: 'k', admitad });
 });
