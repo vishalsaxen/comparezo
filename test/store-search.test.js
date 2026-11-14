@@ -129,3 +129,20 @@ test('the default store search lists what is not connected', async () => {
     assert.ok(r.notConnected.Admitad && r.notConnected.EarnKaro);
   } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('Admitad 404 (no approved ad space or joined stores) becomes a friendly note, not an error', async () => {
+  const fakeFetch = async url => url.endsWith('/token/')
+    ? new Response(JSON.stringify({ access_token: 't', expires_in: 3600 }))
+    : new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 });
+  const admitad = createAdmitad({ clientId: 'id', clientSecret: 's', websiteId: '42', fetch: fakeFetch });
+  const db = openDb(':memory:');
+  seed(db);
+  const r = await createStoreSearch(db, { sources: [{ name: 'Admitad', find: admitad.findProducts }] }).search('kettle');
+  assert.deepEqual(r.sources.map(s => [s.name, s.ok, s.count]), [['Admitad', true, 0]]);
+  assert.match(r.sources[0].note, /ad space is approved/);
+
+  // Other failures are still shown as errors.
+  const broken = createAdmitad({ clientId: 'id', clientSecret: 's', websiteId: '42', fetch: async () => new Response('{}', { status: 500 }) });
+  const r2 = await createStoreSearch(db, { sources: [{ name: 'Admitad', find: broken.findProducts }] }).search('kettle');
+  assert.equal(r2.sources[0].ok, false);
+});

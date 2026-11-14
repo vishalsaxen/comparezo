@@ -3,7 +3,7 @@
 // Only official partner APIs and product feeds are used (Amazon Creators API, Flipkart Affiliate
 // API, Admitad product feeds). Nothing reads store web pages.
 // A source is { name, find(q, { limit, matches }) } returning
-// [{ store, title, price, mrp, url, image }]. A slow or broken source never holds back the others.
+// [{ store, title, price, mrp, url, image }] (or { results, note }). A slow or broken source never holds back the others.
 
 const STOP = new Set(['the', 'and', 'with', 'for', 'of', 'in', 'a', 'an', 'to', 'by', 'on']);
 function words(s) {
@@ -52,9 +52,10 @@ function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 15
     await Promise.all(sources.map(async src => {
       try {
         const got = await withTimeout(Promise.resolve(src.find(q, { limit: perSource, matches })), timeoutMs, src.name);
-        const list = (Array.isArray(got) ? got : []).slice(0, perSource);
+        // A source returns a list, or { results, note } to explain an empty answer.
+        const list = (Array.isArray(got) ? got : Array.isArray(got && got.results) ? got.results : []).slice(0, perSource);
         all.push(...list.map(r => ({ ...r, source: src.name })));
-        statuses.push({ name: src.name, ok: true, count: list.length });
+        statuses.push({ name: src.name, ok: true, count: list.length, ...(got && got.note ? { note: String(got.note).slice(0, 300) } : {}) });
       } catch (e) {
         statuses.push({ name: src.name, ok: false, error: String(e && e.message || e).slice(0, 300) });
       }

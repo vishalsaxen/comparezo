@@ -414,11 +414,15 @@ $('findForm').addEventListener('submit', async e => {
 });
 
 function renderSources(r) {
-  const parts = (r.sources || []).map(s => s.ok ? `<strong>${esc(s.name)}</strong>: ${s.count} found` : `<strong>${esc(s.name)}</strong>: <span class="err">${esc(s.error)}</span>`);
-  const off = Object.entries(r.notConnected || {});
-  $('findSources').hidden = !parts.length && !off.length;
-  $('findSources').innerHTML = `<span>${parts.length ? 'Searched ' + parts.join(' · ') + '.' : 'No store search is connected yet, so nothing can be found by name.'}
-    ${off.length ? `<details style="margin-top:6px"><summary>Not searched (${off.length})</summary><ul class="src-list">${off.map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`).join('')}</ul></details>` : ''}</span>`;
+  const searched = (r.sources || []).map(s => `<li><strong>${esc(s.name)}</strong>: ${s.ok
+    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}`
+    : `<span class="err">${esc(s.error)}</span>`}</li>`);
+  const off = Object.entries(r.notConnected || {}).map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`);
+  $('findSources').hidden = !searched.length && !off.length;
+  $('findSources').innerHTML = `<div class="src-box">
+    <div><strong>Searched</strong>${searched.length ? `<ul class="src-list">${searched.join('')}</ul>` : '<p class="sub" style="margin:2px 0 0">No store search is connected yet, so nothing can be found by name.</p>'}</div>
+    ${off.length ? `<div><strong>Not searched</strong><ul class="src-list">${off.join('')}</ul></div>` : ''}
+  </div>`;
 }
 
 function renderFind() {

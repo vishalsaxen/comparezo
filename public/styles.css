@@ -372,3 +372,6 @@ html.gated, html.gated body{overflow:hidden}
 .onsite{background:var(--marigold-soft); color:var(--warn); border-radius:8px; padding:10px 12px; font-size:14px}
 .onsite strong{color:var(--ink)}
 .src-list{margin:4px 0 0; padding-left:18px}
+.src-box{display:flex; flex-direction:column; gap:8px; width:100%; color:var(--muted)}
+.src-box strong{color:var(--ink)}
+.src-list li{margin-top:2px}
