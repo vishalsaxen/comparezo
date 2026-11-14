@@ -11,6 +11,7 @@ const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
+const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 
 
@@ -257,6 +258,19 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   });
   app.get('/api/admin/deals/check', requireAdmin, async (_req, res) => res.json(await deals.check()));
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
+
+  // Earnings page: money earned per affiliate network (see earnings.js). Owner only.
+  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals }, connected: { earnkaro: !!earnkaro.connected } });
+  app.get('/api/admin/earnings', requireAdmin, async (req, res) => res.json(await earnings.report({ refresh: req.query.refresh === '1' })));
+  app.post('/api/admin/earnings', requireAdmin, (req, res) => {
+    const r = earnings.save(req.body);
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    res.json(r.entry);
+  });
+  app.delete('/api/admin/earnings/:network/:month', requireAdmin, (req, res) => {
+    if (!earnings.remove(req.params.network, req.params.month)) return res.status(404).json({ error: 'Entry not found.' });
+    res.json({ ok: true });
+  });
 
   // Linezo is the owner's sales tracker, so it needs the admin key too.
   app.get('/api/trends', requireAdmin, (req, res) => {

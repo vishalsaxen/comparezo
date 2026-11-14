@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Earnings · Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css?v=2026-11-14b">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+</head>
+<body>
+<script src="/gate.js"></script>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="/" aria-label="Comparezo home">
+      <span class="wm" aria-hidden="true"><span class="wm-c">Compare</span><span class="wm-st"><span class="wm-z">zo</span><span class="wm-e">E</span></span></span>
+    </a>
+    <nav class="tabs" aria-label="Owner pages">
+      <a href="/#compare">Comparezo</a>
+      <a href="/#linezo">Linezo</a>
+      <a href="/earnings.html" aria-selected="true" aria-current="page">Earnings</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap cat-admin">
+  <div class="lz-head">
+    <div>
+      <div class="eyebrow">Admin</div>
+      <h1 class="lz-title">Earnings</h1>
+      <p class="lede">What each affiliate network owes you. Admitad and Cuelinks report it automatically once their keys are on the server. EarnKaro, ExtraPe and Partnerize have no earnings API, so type their numbers in from their apps.</p>
+    </div>
+    <div class="lz-controls" id="controls" hidden>
+      <button type="button" class="btn btn-ghost" id="refresh">Refresh</button>
+      <button type="button" class="btn btn-ghost" id="logout" title="Remove the admin key from this browser">Log out</button>
+    </div>
+  </div>
+
+  <form class="panel pad key-row" id="keyForm" hidden>
+    <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
+    <button class="btn btn-brand" type="submit">Unlock</button>
+    <span id="keyStatus" role="status"></span>
+  </form>
+
+  <div id="board" hidden>
+    <div class="kpis" id="kpis"></div>
+    <p class="sub" id="totalsNote"></p>
+
+    <div class="earn-list" id="networks"></div>
+
+    <h2 id="enter">Type in earnings</h2>
+    <p class="sub">One entry per network and month. Saving the same network and month again replaces it. Typed-in numbers are used for a network whenever its API gives none.</p>
+    <form class="panel pad sell-form" id="entryForm" novalidate>
+      <div class="field"><label for="e-network">Network</label><select id="e-network"></select></div>
+      <div class="field"><label for="e-month">Month</label><input id="e-month" type="month"></div>
+      <div class="field"><label for="e-pending">Pending (₹)</label><input id="e-pending" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0"></div>
+      <div class="field"><label for="e-confirmed">Confirmed (₹)</label><input id="e-confirmed" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0"></div>
+      <div class="field"><label for="e-paid">Paid to you (₹)</label><input id="e-paid" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0"></div>
+      <div class="field"><label for="e-note">Note (optional)</label><input id="e-note" maxlength="200" placeholder="e.g. From EarnKaro app, 14 Nov"></div>
+      <div class="form-actions">
+        <button class="btn btn-brand" type="submit">Save</button>
+        <span id="entryStatus" role="status"></span>
+      </div>
+    </form>
+
+    <h2>Typed-in entries</h2>
+    <div class="panel pad">
+      <div class="tablebox"><table class="top-table"><thead><tr><th>Month</th><th>Network</th><th class="r">Pending</th><th class="r">Confirmed</th><th class="r">Paid</th><th>Note</th><th></th></tr></thead><tbody id="entries"></tbody></table></div>
+    </div>
+    <p class="sub"><strong>Pending</strong> is waiting for the store to confirm the order. <strong>Confirmed</strong> is approved but not paid out yet. <strong>Paid</strong> is already in your account.</p>
+  </div>
+</main>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/earnings-admin.js"></script>
+</body>
+</html>

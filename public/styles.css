@@ -261,3 +261,26 @@ html.gated, html.gated body{overflow:hidden}
 .bulk-table th{color:var(--muted); font-weight:600}
 .bulk-table img{width:36px; height:36px; object-fit:contain; border-radius:4px; background:var(--surface)}
 .bulk-problems{margin:6px 0 0; padding-left:18px; color:var(--bad); font-size:13px}
+
+/* Earnings page (owner only) */
+.earn-list{display:flex; flex-direction:column; gap:12px}
+.earn-row{display:grid; grid-template-columns:220px 1fr; gap:20px; align-items:start}
+.earn-name{display:flex; flex-direction:column; align-items:flex-start; gap:8px}
+.earn-name h3{font-size:20px}
+.earn-tags{display:flex; gap:6px; flex-wrap:wrap}
+.earn-figs{display:grid; grid-template-columns:1fr 1fr; gap:16px; min-width:0}
+.earn-figs > p{grid-column:1 / -1; margin:0}
+.earn-trio{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:6px}
+.earn-fig{display:flex; flex-direction:column; min-width:0}
+.earn-fig .num{font-size:17px; font-weight:600; overflow-wrap:anywhere}
+.pill{display:inline-block; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--muted)}
+.pill.good{background:var(--good-soft); border-color:transparent; color:var(--good)}
+.pill.warn{background:var(--marigold-soft); border-color:transparent; color:var(--warn)}
+.warn-text{color:var(--warn)}
+@media (max-width:760px){
+  .earn-row,.earn-figs{grid-template-columns:1fr}
+  .earn-name{flex-direction:row; flex-wrap:wrap; align-items:center}
+  .earn-name h3{flex-basis:100%}
+  .earn-name > .earn-tags{flex-basis:100%}
+}
+.nowrap{white-space:nowrap}
