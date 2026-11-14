@@ -244,3 +244,13 @@ html.gated, html.gated body{overflow:hidden}
   .gate{transition:opacity .4s ease} .gate.open{transform:none; opacity:0}
   .gate-tag{animation:none}
 }
+
+/* Excel upload on /products.html */
+.bulk-help{margin-top:12px}
+.bulk-help summary{cursor:pointer; font-weight:600; color:var(--brand)}
+.bulk-help p{margin:10px 0 0}
+.bulk-table{width:100%; border-collapse:collapse; font-size:13px}
+.bulk-table th, .bulk-table td{padding:6px 8px; border-top:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere}
+.bulk-table th{color:var(--muted); font-weight:600}
+.bulk-table img{width:36px; height:36px; object-fit:contain; border-radius:4px; background:var(--surface)}
+.bulk-problems{margin:6px 0 0; padding-left:18px; color:var(--bad); font-size:13px}

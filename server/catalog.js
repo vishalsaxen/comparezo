@@ -20,7 +20,25 @@ function addProduct(db, b = {}, source) {
   if (catError) errors.push(catError);
   const image = String(b.image || '').trim();
   if (image && !HTTPS.test(image)) errors.push('The photo link must start with https://');
-  const offers = (Array.isArray(b.offers) ? b.offers : []).slice(0, 12).map(o => ({
+  const checked = cleanOffers(b.offers);
+  errors.push(...checked.errors);
+  const offers = checked.offers;
+  if (errors.length) return { errors };
+
+  db.exec('BEGIN');
+  try {
+    const id = Number(db.prepare(`INSERT INTO products (name, category, sub_category, type, spec, image, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(name, b.category, subCategory, type, String(b.spec || '').trim().slice(0, 200), image || null, source).lastInsertRowid);
+    insertOffers(db, id, offers);
+    db.exec('COMMIT');
+    return { id };
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
+// Checks store offers: each needs a store, a price above ₹0 and an https:// link.
+function cleanOffers(list) {
+  const errors = [];
+  const offers = (Array.isArray(list) ? list : []).slice(0, 12).map(o => ({
     store: String(o.store || '').trim().slice(0, 40),
     price: Math.round(Number(o.price)),
     mrp: o.mrp ? Math.round(Number(o.mrp)) : null,
@@ -35,17 +53,12 @@ function addProduct(db, b = {}, source) {
     if (o.mrp !== null && (!Number.isFinite(o.mrp) || o.mrp < 1)) errors.push(`${n}: MRP must be a number.`);
     if (!HTTPS.test(o.url)) errors.push(`${n}: paste the product link (starting with https://).`);
   });
-  if (errors.length) return { errors };
+  return { offers, errors };
+}
 
-  db.exec('BEGIN');
-  try {
-    const id = Number(db.prepare(`INSERT INTO products (name, category, sub_category, type, spec, image, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(name, b.category, subCategory, type, String(b.spec || '').trim().slice(0, 200), image || null, source).lastInsertRowid);
-    const ins = db.prepare('INSERT INTO offers (product_id, store, price, mrp, delivery_fee, url) VALUES (?, ?, ?, ?, ?, ?)');
-    for (const o of offers) ins.run(id, o.store, o.price, o.mrp, o.deliveryFee, o.url);
-    db.exec('COMMIT');
-    return { id };
-  } catch (e) { db.exec('ROLLBACK'); throw e; }
+function insertOffers(db, productId, offers) {
+  const ins = db.prepare('INSERT INTO offers (product_id, store, price, mrp, delivery_fee, url) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const o of offers) ins.run(productId, o.store, o.price, o.mrp, o.deliveryFee, o.url);
 }
 
 // Delete a product and its store prices. Linezo keeps the click history without the product link.
@@ -81,4 +94,4 @@ function loadCatalog(db, file = path.join(__dirname, 'catalog.json')) {
   return { added, removed, problems };
 }
 
-module.exports = { addProduct, deleteProduct, loadCatalog };
+module.exports = { addProduct, deleteProduct, loadCatalog, cleanOffers, insertOffers };

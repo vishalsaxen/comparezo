@@ -3,6 +3,11 @@
 // Token:   POST https://api.admitad.com/token/  (Basic base64(id:secret), grant_type=client_credentials, scope=coupons_for_website)
 // Coupons: GET  https://api.admitad.com/coupons/website/<website id>/?limit=&offset=   (Bearer token)
 // Each coupon's goto_link is already an Admitad tracking link, so it earns commission as it is.
+// Links:   deeplink(url) turns a store product link into an Admitad tracking link, for stores
+//          (programs) the website has joined. It signs in separately with the scopes
+//          advcampaigns_for_website + deeplink_generator, so coupons keep working if those are off.
+//          GET /advcampaigns/website/<website id>/?connection_status=active  -> joined stores
+//          GET /deeplink/<website id>/advcampaign/<campaign id>/?ulp=<link>  -> ["https://ad.admitad.com/g/…"]
 // Coupons are cached for an hour so the free server doesn't call Admitad on every visit.
 const API = 'https://api.admitad.com';
 const TTL_MS = 60 * 60 * 1000;
@@ -33,26 +38,27 @@ function toDeal(c) {
 
 function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 500, maxPages = 10 } = {}) {
   const connected = !!(clientId && clientSecret && websiteId);
-  let token = null;   // { value, until }
+  const tokens = {};   // scope -> { value, until }
   let cache = null;   // { at, deals, error }
 
-  async function getToken() {
+  async function getToken(scope = 'coupons_for_website') {
+    const token = tokens[scope];
     if (token && now() < token.until) return token.value;
     const r = await fetch(`${API}/token/`, {
       method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, scope: 'coupons_for_website' }).toString(),
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, scope }).toString(),
     });
     const body = await r.json().catch(() => null);
     if (!r.ok || !body || !body.access_token) throw new Error(`Admitad sign-in failed (${r.status}): ${(body && (body.error_description || body.error)) || 'check the client ID and secret'}`);
-    token = { value: body.access_token, until: now() + Math.max(60, (Number(body.expires_in) || 3600) - 60) * 1000 };
-    return token.value;
+    tokens[scope] = { value: body.access_token, until: now() + Math.max(60, (Number(body.expires_in) || 3600) - 60) * 1000 };
+    return tokens[scope].value;
   }
 
   async function page(offset, limit) {
     const r = await fetch(`${API}/coupons/website/${encodeURIComponent(websiteId)}/?limit=${limit}&offset=${offset}`, { headers: { Authorization: `Bearer ${await getToken()}`, Accept: 'application/json' } });
     const body = await r.json().catch(() => null);
-    if (r.status === 401) token = null;   // sign in again next time
+    if (r.status === 401) delete tokens.coupons_for_website;   // sign in again next time
     if (!r.ok) throw new Error(`Admitad ${r.status}: ${(body && (body.error_description || body.error || body.detail)) || 'request failed'}`);
     return body || {};
   }
@@ -92,7 +98,42 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     } catch (e) { return { connected: true, error: e.message }; }
   }
 
-  return { list, check, connected };
+  // Product links through Admitad, for stores the website has joined.
+  const LINK_SCOPE = 'advcampaigns_for_website deeplink_generator';
+  let joined = null;   // { at, list: [{ id, name, host }], error }
+  const hostOf = u => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } };
+  async function get(path) {
+    const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${await getToken(LINK_SCOPE)}`, Accept: 'application/json' } });
+    const body = await r.json().catch(() => null);
+    if (r.status === 401) delete tokens[LINK_SCOPE];
+    if (!r.ok) throw new Error(`Admitad ${r.status}: ${(body && (body.error_description || body.error || body.detail)) || 'request failed'}`);
+    return body;
+  }
+  async function joinedStores() {
+    if (joined && now() - joined.at < TTL_MS) return joined;
+    try {
+      const body = await get(`/advcampaigns/website/${encodeURIComponent(websiteId)}/?connection_status=active&limit=500`);
+      const list = (Array.isArray(body && body.results) ? body.results : [])
+        .map(c => ({ id: c.id, name: String(c.name || ''), host: hostOf(httpsUrl(c.site_url) || '') })).filter(c => c.id && c.host);
+      joined = { at: now(), list };
+    } catch (e) { joined = { at: now() - TTL_MS + 5 * 60 * 1000, list: joined ? joined.list : [], error: e.message }; }
+    return joined;
+  }
+  // Returns { link, store } or { error }.
+  async function deeplink(url) {
+    if (!connected) return { error: 'Admitad is not set up.' };
+    const host = hostOf(url);
+    const { list, error } = await joinedStores();
+    const c = list.find(x => host === x.host || host.endsWith('.' + x.host) || x.host.endsWith('.' + host));
+    if (!c) return { error: error || 'Your Admitad website has not joined this store.' };
+    try {
+      const body = await get(`/deeplink/${encodeURIComponent(websiteId)}/advcampaign/${c.id}/?ulp=${encodeURIComponent(url)}`);
+      const link = (JSON.stringify(body || '').replace(/\\\//g, '/').match(/https:\/\/[^\s"'<>\\]+/g) || []).find(l => l !== url);
+      return link ? { link, store: c.name } : { error: 'Admitad sent no link back.' };
+    } catch (e) { return { error: e.message }; }
+  }
+
+  return { list, check, deeplink, connected };
 }
 
 module.exports = { createAdmitad, toDeal };

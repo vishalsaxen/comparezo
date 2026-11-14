@@ -147,12 +147,163 @@ $('myDeals').addEventListener('click', async e => {
   catch (err) { toast(err.message); }
 });
 
+/* Upload products from Excel (sheet.js reads and writes the files) */
+const COLUMNS = ['Name', 'Image', 'URL', 'Price', 'MRP', 'Delivery', 'Store', 'Category', 'Sub-category', 'Type', 'Details'];
+const FIELD_OF = {   // header text (lower case, letters only) -> field sent to the server
+  name: 'name', product: 'name', productname: 'name', title: 'name', producttitle: 'name',
+  image: 'image', imageurl: 'image', imagelink: 'image', photo: 'image', photolink: 'image', photourl: 'image', img: 'image', picture: 'image',
+  url: 'url', link: 'url', productlink: 'url', producturl: 'url', storelink: 'url', buylink: 'url', storeurl: 'url',
+  price: 'price', sellingprice: 'price', saleprice: 'price', offerprice: 'price',
+  mrp: 'mrp', listprice: 'mrp', delivery: 'deliveryFee', deliveryfee: 'deliveryFee', shipping: 'deliveryFee',
+  store: 'store', site: 'store', shop: 'store',
+  category: 'category', subcategory: 'subCategory', type: 'type', details: 'spec', shortdetails: 'spec', spec: 'spec',
+};
+const isExample = name => /^example\b/i.test(String(name || '').trim());
+let sheet = null;   // { fileName, header, headerRow, rows: [[…]], items: [{ row, name, … }] }
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+const WIDTHS = [40, 40, 50, 10, 10, 10, 14, 22, 22, 18, 30];
+
+$('dlTemplate').addEventListener('click', () => download(Sheet.writeXlsx([COLUMNS,
+  ['Example: Cotton kurta, blue (rows starting with Example are skipped)', 'https://… right-click the store photo > Copy image address', 'https://www.myntra.com/…', 749, 1299, 0, 'Myntra', 'Fashion & Clothing'],
+  ['Example: Cotton kurta, blue (rows starting with Example are skipped)', '', 'https://www.flipkart.com/…', 689, '', 40, 'Flipkart', 'Fashion & Clothing'],
+], 'Products', WIDTHS), 'comparezo-products-template.xlsx'));
+
+$('dlProducts').addEventListener('click', async () => {
+  try {
+    const list = await call('GET', '/api/admin/products');
+    const rows = [COLUMNS];
+    for (const p of list) for (const o of p.offers) rows.push([p.name, p.image || '', o.url || '', o.price, o.mrp || '', o.delivery_fee || '', o.store, p.category || '', p.sub_category || '', p.type || '', p.spec || '']);
+    download(Sheet.writeXlsx(rows, 'Products', WIDTHS), `comparezo-products-${stamp()}.xlsx`);
+  } catch (err) { toast(err.message); }
+});
+
+// Category pickers for rows that have no Category column.
+function bulkSubs() {
+  const c = tree.find(x => x.name === $('b-cat').value);
+  const subs = c ? c.subcategories : [];
+  $('b-sub').innerHTML = subs.length ? opts(subs, 'Pick a sub-category') : '<option value="">None</option>';
+  $('b-sub').disabled = !subs.length;
+  bulkTypes();
+}
+function bulkTypes() {
+  const c = tree.find(x => x.name === $('b-cat').value);
+  const s = c && c.subcategories.find(x => x.name === $('b-sub').value);
+  const types = s ? s.types : [];
+  $('b-type-wrap').hidden = !types.length;
+  $('b-type').innerHTML = types.length ? opts(types, 'Pick a type') : '';
+}
+$('b-cat').addEventListener('change', bulkSubs);
+$('b-sub').addEventListener('change', bulkTypes);
+
+function parseSheet(rows) {
+  const norm = h => String(h || '').toLowerCase().replace(/[^a-z]/g, '');
+  const headerRow = rows.slice(0, 10).findIndex(r => r.some(h => FIELD_OF[norm(h)] === 'name') && r.some(h => FIELD_OF[norm(h)] === 'url'));
+  if (headerRow < 0) throw new Error('Could not find the header row. The first row needs at least "Name" and "URL" columns. Download the template to see the layout.');
+  const header = rows[headerRow];
+  const fields = header.map(h => FIELD_OF[norm(h)] || null);
+  const items = [];
+  rows.slice(headerRow + 1).forEach((r, i) => {
+    if (!r.some(v => String(v).trim())) return;
+    const item = { row: headerRow + i + 2 };
+    fields.forEach((f, ci) => { if (f && !item[f]) item[f] = String(r[ci] ?? '').trim(); });
+    if (!isExample(item.name)) items.push(item);
+  });
+  return { header, headerRow, rows, items };
+}
+
+function showPreview() {
+  const items = sheet.items;
+  const names = new Set(items.map(x => (x.name || '').toLowerCase()).filter(Boolean));
+  const hasCat = items.some(x => x.category);
+  const missing = items.filter(x => !x.name || !x.url || !x.price).length;
+  $('bulkPreview').hidden = false;
+  $('bulkPreview').innerHTML = `<p class="sub"><strong>${esc(sheet.fileName)}</strong>: ${items.length} row${items.length === 1 ? '' : 's'} for ${names.size} product${names.size === 1 ? '' : 's'}.`
+    + (missing ? ` ${missing} row${missing === 1 ? ' is' : 's are'} missing a name, URL or price and will be skipped.` : '')
+    + (hasCat ? ' Rows without a Category use the one picked above.' : ' The sheet has no Category column, so every product goes in the category picked above.') + '</p>'
+    + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th></th><th>Name</th><th>Price</th><th>Store / link</th></tr></thead><tbody>`
+    + items.slice(0, 8).map(x => `<tr><td>${x.row}</td><td>${/^https:\/\//.test(x.image || '') ? `<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</td>
+        <td>${esc(x.name || '—')}</td><td>${esc(x.price || '—')}</td><td>${esc(x.store || '')} <span class="sub">${esc((x.url || '—').slice(0, 60))}</span></td></tr>`).join('')
+    + `</tbody></table></div>${items.length > 8 ? `<p class="sub">…and ${items.length - 8} more.</p>` : ''}`;
+  $('bulkAdd').disabled = !items.length;
+  $('bulkLinks').disabled = !items.some(x => x.url);
+}
+
+$('bulkFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  const st = $('bulkStatus');
+  sheet = null; $('bulkPreview').hidden = $('bulkProblems').hidden = true;
+  $('bulkAdd').disabled = $('bulkLinks').disabled = true;
+  st.className = ''; st.textContent = '';
+  if (!file) return;
+  try {
+    sheet = { fileName: file.name, ...parseSheet(await Sheet.readSheet(file)) };
+    if (!sheet.items.length) throw new Error('The sheet has a header row but no products under it.');
+    if (sheet.items.length > 500) throw new Error(`Upload at most 500 rows at a time. This sheet has ${sheet.items.length}; split it into smaller sheets.`);
+    showPreview();
+  } catch (err) { sheet = null; st.className = 'err'; st.textContent = err.message; }
+});
+
+$('bulkForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!sheet) return;
+  const st = $('bulkStatus');
+  st.className = ''; st.textContent = 'Adding…'; $('bulkAdd').disabled = true;
+  try {
+    const r = await call('POST', '/api/admin/products/bulk', { rows: sheet.items, defaults: { category: $('b-cat').value, subCategory: $('b-sub').value, type: $('b-type').value } });
+    const parts = [];
+    if (r.added) parts.push(`Added ${r.added} new product${r.added === 1 ? '' : 's'}`);
+    if (r.updated) parts.push(`added stores to ${r.updated} product${r.updated === 1 ? '' : 's'} already on the site`);
+    if (r.skipped) parts.push(`skipped ${r.skipped} link${r.skipped === 1 ? '' : 's'} that were already there`);
+    st.className = r.added || r.updated ? 'ok' : 'err';
+    st.textContent = (parts.join(', ') || 'Nothing was added') + '.' + (r.problems.length ? ` ${r.problems.length} row${r.problems.length === 1 ? ' needs' : 's need'} fixing, see below.` : '');
+    $('bulkProblems').hidden = !r.problems.length;
+    $('bulkProblems').innerHTML = r.problems.length ? `<span class="label">Rows not added</span><ul class="bulk-problems">${r.problems.slice(0, 100).map(p => `<li>Row ${p.row}${p.name ? ` (${esc(p.name)})` : ''}: ${esc(p.error)}</li>`).join('')}</ul>` : '';
+    if (r.added || r.updated) loadList();
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+  finally { $('bulkAdd').disabled = false; }
+});
+
+// The same sheet back, with an "Affiliate link" column filled in by EarnKaro or Admitad.
+$('bulkLinks').addEventListener('click', async () => {
+  if (!sheet) return;
+  const st = $('bulkStatus'), btn = $('bulkLinks');
+  const urlCol = sheet.header.findIndex(h => FIELD_OF[String(h || '').toLowerCase().replace(/[^a-z]/g, '')] === 'url');
+  const body = sheet.rows.slice(sheet.headerRow + 1);
+  const urls = [...new Set(body.map(r => String(r[urlCol] ?? '').trim()).filter(u => /^https?:\/\//.test(u)))];
+  const done = new Map();
+  btn.disabled = true; st.className = '';
+  try {
+    for (let i = 0; i < urls.length; i += 25) {
+      st.textContent = `Making links… ${i} of ${urls.length}`;
+      const r = await call('POST', '/api/admin/affiliate-links', { urls: urls.slice(i, i + 25).map(u => u.replace(/^http:\/\//, 'https://')) });
+      if (!r.earnkaro && !r.admitad) throw new Error('Neither EarnKaro nor Admitad is set up on the server (EARNKARO_API_KEY, ADMITAD_*).');
+      r.results.forEach((x, j) => done.set(urls[i + j], x));
+    }
+    const width = Math.max(sheet.header.length, ...body.map(r => r.length));
+    const pad = r => Array.from({ length: width }, (_, i) => r[i] ?? '');
+    const out = [[...pad(sheet.header), 'Affiliate link', 'Via', 'Note'],
+      ...body.map(r => { const x = done.get(String(r[urlCol] ?? '').trim()); return [...pad(r), x && x.link || '', x && x.via || '', x ? x.note || '' : '']; })];
+    download(Sheet.writeXlsx(out, 'Affiliate links', [...Array(width).fill(24), 50, 10, 40]), sheet.fileName.replace(/\.(xlsx|csv|tsv|txt)$/i, '') + '-affiliate-links.xlsx');
+    const made = [...done.values()].filter(x => x.link).length;
+    st.className = made ? 'ok' : 'err';
+    st.textContent = `Made ${made} of ${urls.length} affiliate link${urls.length === 1 ? '' : 's'}. The file is in your downloads.` + (made < urls.length ? ' The Note column says why the others were not made.' : '');
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+  finally { btn.disabled = false; }
+});
+
 /* Unlock */
 async function unlock() {
   try {
     await call('POST', '/api/admin/check');
     keyStore.set(key);
-    $('keyForm').hidden = true; $('productForm').hidden = false;
+    $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false;
     loadList(); loadMyDeals();
   } catch (err) {
     $('keyStatus').className = 'err';
@@ -182,7 +333,8 @@ $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('admi
 (async () => {
   tree = await (await fetch('/api/categories')).json();
   $('p-cat').innerHTML = opts(tree, 'Pick a category');
-  fillSubs(); resetForm();
+  $('b-cat').innerHTML = opts(tree, 'Pick a category');
+  fillSubs(); bulkSubs(); resetForm();
   if (key) unlock();
 })();
 })();

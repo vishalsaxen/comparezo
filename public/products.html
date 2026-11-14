@@ -50,6 +50,31 @@
     </div>
   </form>
 
+  <section id="bulkWrap" hidden>
+    <h2>Upload products from Excel</h2>
+    <p class="sub">Add many products at once. Put one store link per row with the columns <strong>Name</strong>, <strong>Image</strong>, <strong>URL</strong> and <strong>Price</strong>. You can also add MRP, Delivery, Store, Category, Sub-category, Type and Details. Rows with the same name become one product with several stores to compare. A product already on the site gets the new store links added to it. Excel (.xlsx) and CSV both work.</p>
+    <p><button type="button" class="btn btn-ghost small" id="dlTemplate">Download the Excel template</button> <button type="button" class="btn btn-ghost small" id="dlProducts">Download all products as Excel</button></p>
+    <form class="panel pad sell-form" id="bulkForm" novalidate>
+      <div class="field full"><label for="bulkFile">Excel or CSV file</label><input id="bulkFile" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></div>
+      <div class="field"><label for="b-cat">Category for rows without one</label><select id="b-cat"></select></div>
+      <div class="field"><label for="b-sub">Sub-category</label><select id="b-sub"></select></div>
+      <div class="field" id="b-type-wrap" hidden><label for="b-type">Type</label><select id="b-type"></select></div>
+      <div class="field full" id="bulkPreview" hidden></div>
+      <div class="form-actions">
+        <button class="btn btn-brand" type="submit" id="bulkAdd" disabled>Add these products</button>
+        <button type="button" class="btn btn-ghost" id="bulkLinks" disabled>Download with affiliate links</button>
+        <span id="bulkStatus" role="status"></span>
+      </div>
+      <div class="field full" id="bulkProblems" hidden></div>
+    </form>
+    <details class="panel pad bulk-help">
+      <summary>Where the sheet and the affiliate links come from</summary>
+      <p class="sub"><strong>Names, photos and prices come from your sheet.</strong> EarnKaro and Admitad turn a store link into your commission link, but neither gives out a list of products with names, photos and prices, so those still come from you. Comparezo doesn't copy them from store pages either.</p>
+      <p class="sub"><strong>Download with affiliate links</strong> sends each URL in your sheet to EarnKaro (and to Admitad for stores your Admitad website has joined) and gives you back the same sheet with an "Affiliate link" column. You don't need it for the site itself: the Buy button already turns plain store links into your EarnKaro link when a shopper clicks.</p>
+      <p class="sub"><strong>ExtraPe</strong> has no API, and a Chrome extension can only run in your own browser, not inside a website. To use ExtraPe links, convert them with the <a href="https://chromewebstore.google.com/detail/extrape-affiliate-link-co/jkjdnkdcmpidffnghmclamlhadpflhlb" target="_blank" rel="noopener">ExtraPe extension</a> while you browse a store, paste them in the URL column, and fill in the Store column (short links don't show which store they are for).</p>
+    </details>
+  </section>
+
   <section id="listWrap" hidden>
     <h2>All products</h2>
     <p class="sub">Products are saved in Firebase. Delete removes a product from the site and the database. You can also delete a product from its page on the main site while this browser has the admin key. <strong>Copy list</strong> makes a backup copy.</p>
@@ -81,6 +106,7 @@
   </section>
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/sheet.js"></script>
 <script src="/products-admin.js"></script>
 </body>
 </html>
