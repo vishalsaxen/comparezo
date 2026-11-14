@@ -18,6 +18,7 @@ const TABLES = [
   ['feed_state', ['key']],
   ['feed_seen', ['store', 'external_id']],
   ['my_deals', ['id']],
+  ['earnings_manual', ['network', 'month']],
 ];
 
 const docId = (key, row) => key.length === 1 && Number.isInteger(row[key[0]])

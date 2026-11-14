@@ -101,7 +101,31 @@ function createDeals({ apiKey = '', fetch = globalThis.fetch, now = () => Date.n
     } catch (e) { return { connected: true, error: e.message }; }
   }
 
-  return { list, check, connected: !!apiKey };
+  // Money earned, for the Earnings page, from GET /reports/earnings (documented at
+  // developers.cuelinks.com/docs/reference/reports/earnings). One row per month with pending,
+  // validated, payable, claimed and rejected, plus totals; amounts come as strings.
+  // We show validated + payable as "confirmed" and claimed as "paid". Needs the read:reports scope.
+  let earned = null;   // { at, result }
+  async function earnings({ month, refresh = false } = {}) {
+    if (!apiKey) return { connected: false };
+    if (!refresh && earned && now() - earned.at < TTL_MS) return earned.result;
+    let result;
+    try {
+      const end = new Date(now());
+      const start = new Date(Date.UTC(end.getUTCFullYear() - 2, end.getUTCMonth() + 1, 1));   // 24 months, the API's limit
+      const body = await get(`/reports/earnings?start_date=${start.toISOString().slice(0, 10)}&end_date=${end.toISOString().slice(0, 10)}&per_page=100`);
+      const n = v => Math.round((Number(v) || 0) * 100) / 100;
+      const fig = r => r ? { pending: n(r.pending), confirmed: n(Number(r.validated || 0) + Number(r.payable || 0)), paid: n(r.claimed) } : { pending: 0, confirmed: 0, paid: 0 };
+      const rows = Array.isArray(body && body.data) ? body.data : [];
+      const want = month || end.toISOString().slice(0, 7);
+      result = { connected: true, figures: { currency: String((body && body.totals && body.totals.currency) || (body && body.meta && body.meta.currency) || 'INR'),
+        thisMonth: fig(rows.find(r => r.month === want)), total: fig(body && body.totals) }, note: 'Total covers the last 24 months.' };
+    } catch (e) { result = { connected: true, error: e.message }; }
+    earned = { at: result.error ? now() - TTL_MS + 5 * 60 * 1000 : now(), result };
+    return result;
+  }
+
+  return { list, check, earnings, connected: !!apiKey };
 }
 
 module.exports = { createDeals, toDeal, listOf };

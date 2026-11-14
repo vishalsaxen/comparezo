@@ -8,6 +8,10 @@
 //          advcampaigns_for_website + deeplink_generator, so coupons keep working if those are off.
 //          GET /advcampaigns/website/<website id>/?connection_status=active  -> joined stores
 //          GET /deeplink/<website id>/advcampaign/<campaign id>/?ulp=<link>  -> ["https://ad.admitad.com/g/…"]
+// Earnings: GET /statistics/campaigns/?website=<id>&date_start=dd.mm.yyyy&date_end=dd.mm.yyyy
+//          (scope "statistics"). Each row has payment_sum_open (pending), payment_sum_approved
+//          (confirmed), payment_sum_declined and currency. The field names are from Admitad's
+//          "Publisher reports" docs; the scope name is not confirmed there, so check it with the real keys.
 // Coupons are cached for an hour so the free server doesn't call Admitad on every visit.
 const API = 'https://api.admitad.com';
 const TTL_MS = 60 * 60 * 1000;
@@ -133,7 +137,46 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     } catch (e) { return { error: e.message }; }
   }
 
-  return { list, check, deeplink, connected };
+  // Money earned, for the Earnings page: this month and since 2020, summed over every store.
+  const STATS_SCOPE = 'statistics';
+  let stats = null;   // { at, result }
+  const ddmmyyyy = d => `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+  async function sums(from, to) {
+    const token = await getToken(STATS_SCOPE);
+    const q = new URLSearchParams({ website: websiteId, date_start: ddmmyyyy(from), date_end: ddmmyyyy(to), limit: '500' });
+    const r = await fetch(`${API}/statistics/campaigns/?${q}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+    const body = await r.json().catch(() => null);
+    if (r.status === 401) delete tokens[STATS_SCOPE];
+    if (!r.ok) throw new Error(`Admitad statistics ${r.status}: ${(body && (body.error_description || body.error || body.detail)) || 'request failed'}`);
+    const byCurrency = {};
+    for (const row of Array.isArray(body && body.results) ? body.results : []) {
+      const c = String(row.currency || 'INR').toUpperCase();
+      const s = byCurrency[c] || (byCurrency[c] = { pending: 0, confirmed: 0, paid: null });
+      s.pending += Number(row.payment_sum_open) || 0;
+      s.confirmed += Number(row.payment_sum_approved) || 0;
+    }
+    return byCurrency;
+  }
+  async function earnings({ month, refresh = false } = {}) {
+    if (!connected) return { connected: false };
+    if (!refresh && stats && now() - stats.at < TTL_MS) return stats.result;
+    let result;
+    try {
+      const today = new Date(now());
+      const [y, m] = (month || today.toISOString().slice(0, 7)).split('-').map(Number);
+      const [mon, all] = await Promise.all([sums(new Date(Date.UTC(y, m - 1, 1)), today), sums(new Date(Date.UTC(2020, 0, 1)), today)]);
+      const currencies = [...new Set([...Object.keys(all), ...Object.keys(mon)])];
+      const currency = currencies.includes('INR') || !currencies.length ? 'INR' : currencies[0];
+      const empty = { pending: 0, confirmed: 0, paid: null };
+      const round = s => ({ pending: Math.round(s.pending * 100) / 100, confirmed: Math.round(s.confirmed * 100) / 100, paid: null });
+      result = { connected: true, figures: { currency, thisMonth: round(mon[currency] || empty), total: round(all[currency] || empty) },
+        note: 'Paid-out amounts are not in this report; see your Admitad balance.' + (currencies.length > 1 ? ` Also earned in ${currencies.filter(c => c !== currency).join(', ')}, not shown.` : '') };
+    } catch (e) { result = { connected: true, error: e.message }; }
+    stats = { at: result.error ? now() - TTL_MS + 5 * 60 * 1000 : now(), result };
+    return result;
+  }
+
+  return { list, check, deeplink, earnings, connected };
 }
 
 module.exports = { createAdmitad, toDeal };

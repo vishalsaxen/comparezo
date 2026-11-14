@@ -81,6 +81,17 @@ CREATE TABLE IF NOT EXISTS my_deals (
   ends_at TEXT,                   -- YYYY-MM-DD, last day the deal works
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- Earnings the owner types in on /earnings.html, per affiliate network and month (see earnings.js).
+CREATE TABLE IF NOT EXISTS earnings_manual (
+  network TEXT NOT NULL,
+  month TEXT NOT NULL,            -- YYYY-MM
+  pending REAL NOT NULL DEFAULT 0,
+  confirmed REAL NOT NULL DEFAULT 0,
+  paid REAL NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (network, month)
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;
