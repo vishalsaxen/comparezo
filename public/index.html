@@ -7,7 +7,7 @@
 <title>Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-14b">
+<link rel="stylesheet" href="/styles.css?v=2026-11-14c">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -31,10 +31,13 @@
     <a class="logo" href="#compare" aria-label="Comparezo home">
       <span class="wm" aria-hidden="true"><span class="wm-c">Compare</span><span class="wm-st"><span class="wm-z">zo</span><span class="wm-e">E</span></span></span>
     </a>
-    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections" hidden>
+    <!-- Everyone sees Comparezo and Super Saver Deals. The rest show only in a browser with the admin key. -->
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
       <a role="tab" id="tab-compare" href="#compare" aria-controls="view-compare">Comparezo</a>
-      <a role="tab" id="tab-linezo" href="#linezo" aria-controls="view-linezo">Linezo</a>
-      <a href="/earnings.html">Earnings</a>
+      <a role="tab" id="tab-deals" href="#deals" aria-controls="view-deals">Super Saver Deals</a>
+      <a role="tab" id="tab-seller" href="#seller" aria-controls="view-seller" data-owner hidden>Seller Catalog</a>
+      <a role="tab" id="tab-linezo" href="#linezo" aria-controls="view-linezo" data-owner hidden>Linezo</a>
+      <a href="/earnings.html" data-owner hidden>Earnings</a>
     </nav>
   </div>
 </header>
@@ -50,21 +53,11 @@
         <input id="q" type="search" aria-label="Search products" placeholder="Search a product, e.g. earbuds, kurta, pressure cooker" autocomplete="off">
         <button class="btn btn-brand" type="submit">Compare</button>
       </form>
-      <div class="chips" id="cats" aria-label="Categories"></div>
-      <div class="chips" id="subcats" aria-label="Sub-categories" hidden></div>
-      <div class="chips" id="typecats" aria-label="Types" hidden></div>
     </section>
 
     <section class="compare wrap" aria-label="Comparison">
       <div class="panel results" id="results"></div>
       <div class="panel detail" id="detail"></div>
-    </section>
-
-    <section class="community wrap" id="deals" hidden>
-      <div class="eyebrow">Coupons and offers</div>
-      <h2>Number of deals now: <span id="dealCount"></span></h2>
-      <p class="sub">Live offers from the stores. Codes and prices are set by the store and can change.</p>
-      <div class="lgrid" id="dealGrid"></div>
     </section>
 
     <section class="community wrap" id="new" hidden>
@@ -74,6 +67,29 @@
       <div class="lgrid" id="newGrid"></div>
     </section>
 
+  </div>
+
+  <!-- Super Saver Deals tab: every deal (the owner's own, then Admitad, then Cuelinks) -->
+  <div id="view-deals" role="tabpanel" aria-labelledby="tab-deals" hidden>
+    <section class="hero wrap deals-hero">
+      <div class="eyebrow">Super Saver Deals</div>
+      <h1>Today's <em>best deals</em>, all in one place.</h1>
+      <p class="lede">Coupons and offers from the stores. Codes and prices are set by the store and can change.</p>
+    </section>
+    <section class="community wrap" id="dealList">
+      <h2>Number of deals now: <span id="dealCount">0</span></h2>
+      <div class="lgrid" id="dealGrid"></div>
+      <div class="empty" id="dealEmpty" hidden>No deals right now. Check back soon.</div>
+    </section>
+  </div>
+
+  <!-- Seller Catalog tab: owner only, contents still to be decided -->
+  <div id="view-seller" role="tabpanel" aria-labelledby="tab-seller" hidden>
+    <section class="hero wrap">
+      <div class="eyebrow">Seller Catalog</div>
+      <h1>Seller Catalog</h1>
+      <p class="lede">Only you can see this tab, because this browser has the admin key. It is empty for now.</p>
+    </section>
   </div>
 
   <!-- Linezo tab -->
@@ -111,6 +127,6 @@
 </main>
 <footer><div class="wrap foot">Comparezo. Comparezo may earn a commission when you buy through store links, at no extra cost to you. · Contact: <a href="mailto:gizee@giazonest.com">gizee@giazonest.com</a> · <a href="/categories.html">Manage categories</a> · <a href="/products.html">Add products</a></div></footer>
 <div class="toast-pop" id="toast" role="status" hidden></div>
-<script src="/app.js?v=2026-11-14b"></script>
+<script src="/app.js?v=2026-11-14c"></script>
 </body>
 </html>

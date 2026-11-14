@@ -1,4 +1,5 @@
-// Comparezo front end: two tabs, Comparezo (compare prices) and Linezo (your sales tracker).
+// Comparezo front end. Public tabs: Comparezo (compare prices) and Super Saver Deals.
+// Owner-only tabs: Seller Catalog (placeholder) and Linezo (your sales tracker).
 (() => {
 const STORE_COLORS = {
   'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c',
@@ -51,16 +52,20 @@ document.querySelectorAll('a[data-open]').forEach(a => {
 });
 /* ---------- Tabs ---------- */
 let linezoLoaded = false;
-// Linezo is only for the owner: the tabs show only in a browser that has the admin key.
+// Everyone sees Comparezo and Super Saver Deals. Seller Catalog, Linezo and Earnings are only for
+// the owner: those tabs show only in a browser that has the admin key.
+const TABS = { compare: 'Comparezo', deals: 'Super Saver Deals', seller: 'Seller Catalog', linezo: 'Linezo' };
+const OWNER_TABS = ['seller', 'linezo'];
 function route() {
   const owner = !!adminKey();
-  $('tabs').hidden = !owner;
-  const tab = owner && location.hash === '#linezo' ? 'linezo' : 'compare';
-  $('view-compare').hidden = tab !== 'compare';
-  $('view-linezo').hidden = tab !== 'linezo';
-  $('tab-compare').setAttribute('aria-selected', tab === 'compare');
-  $('tab-linezo').setAttribute('aria-selected', tab === 'linezo');
-  document.title = tab === 'linezo' ? 'Linezo · Comparezo' : 'Comparezo';
+  document.querySelectorAll('#tabs [data-owner]').forEach(a => { a.hidden = !owner; });
+  let tab = location.hash.slice(1);
+  if (!TABS[tab] || (OWNER_TABS.includes(tab) && !owner)) tab = 'compare';
+  for (const t of Object.keys(TABS)) {
+    $('view-' + t).hidden = t !== tab;
+    $('tab-' + t).setAttribute('aria-selected', t === tab);
+  }
+  document.title = tab === 'compare' ? 'Comparezo' : `${TABS[tab]} · Comparezo`;
   if (tab === 'linezo' && !linezoLoaded) { linezoLoaded = true; loadTrends(); }
 }
 window.addEventListener('hashchange', route);
@@ -69,7 +74,7 @@ window.addEventListener('hashchange', route);
 $('lzLogout').addEventListener('click', () => {
   try { localStorage.removeItem('cz-admin-key'); } catch { /* private mode */ }
   linezoLoaded = false;
-  if (location.hash === '#linezo') history.replaceState(null, '', '#compare');
+  if (OWNER_TABS.includes(location.hash.slice(1))) history.replaceState(null, '', '#compare');
   route();
   toast('Logged out of Linezo. Enter your admin key on Add products to log in again.');
 });
@@ -191,7 +196,7 @@ async function loadNewArrivals() {
   // Only show the section once a store feed is connected and has something new.
   $('new').hidden = !data.items.length;
 }
-/* ---------- Comparezo: deals (the owner's own, then Cuelinks) ---------- */
+/* ---------- Super Saver Deals (the owner's own, then Admitad, then Cuelinks) ---------- */
 async function loadDeals() {
   const data = await api('/api/deals');
   $('dealGrid').innerHTML = data.deals.map(d => {
@@ -201,7 +206,7 @@ async function loadDeals() {
     return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc((d.url.startsWith('/api/') ? (window.CZ_API || '') : '') + d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
   }).join('');
   $('dealCount').textContent = data.deals.length.toLocaleString('en-IN');
-  $('deals').hidden = !data.deals.length;
+  $('dealEmpty').hidden = data.deals.length > 0;
 }
 /* ---------- Linezo: trends ---------- */
 const lz = { days: 30, category: '' };
@@ -286,15 +291,6 @@ const subsOf = name => (categories.find(c => c.name === name) || { subcategories
 const subNames = name => subsOf(name).map(s => s.name);
 const typesOf = (name, sub) => (subsOf(name).find(s => s.name === sub) || { types: [] }).types.map(t => t.name);
 const opt = (v, label = v) => `<option value="${esc(v)}">${esc(label)}</option>`;
-const chipRow = (el, label, items, key, picked) => {
-  $(el).hidden = !items.length;
-  $(el).innerHTML = items.length ? `<span class="sub">${esc(label)}:</span>` + items.map(s => `<button type="button" class="chip" data-${key}="${esc(s)}" aria-pressed="${s === picked}">${esc(s)}</button>`).join('') : '';
-};
-function renderCatChips() {
-  $('cats').innerHTML = '<span class="sub">Browse:</span>' + categories.map(c => `<button type="button" class="chip" data-cat="${esc(c.name)}" aria-pressed="${c.name === state.cat}">${esc(c.name)}</button>`).join('');
-  chipRow('subcats', state.cat || '', state.cat ? subNames(state.cat) : [], 'sub', state.sub);
-  chipRow('typecats', state.sub || '', state.sub ? typesOf(state.cat, state.sub) : [], 'type', state.type);
-}
 async function loadCategories() {
   const fresh = await api('/api/categories');
   if (JSON.stringify(fresh) === JSON.stringify(categories)) return false;
@@ -303,32 +299,11 @@ async function loadCategories() {
   if (state.cat && !categories.some(c => c.name === state.cat)) { state.cat = null; state.sub = null; }
   if (state.sub && !subNames(state.cat).includes(state.sub)) state.sub = null;
   if (state.type && !typesOf(state.cat, state.sub).includes(state.type)) state.type = null;
-  renderCatChips();
   const lzc = $('lzCat').value;
   $('lzCat').innerHTML = opt('', 'All categories') + categories.map(c => opt(c.name)).join('');
   if (categories.some(c => c.name === lzc)) $('lzCat').value = lzc; else lz.category = '';
   return true;
 }
-$('cats').addEventListener('click', e => {
-  const b = e.target.closest('[data-cat]'); if (!b) return;
-  state.cat = state.cat === b.dataset.cat ? null : b.dataset.cat;
-  state.sub = null; state.type = null;
-  renderCatChips();
-  loadProducts();
-});
-$('subcats').addEventListener('click', e => {
-  const b = e.target.closest('[data-sub]'); if (!b) return;
-  state.sub = state.sub === b.dataset.sub ? null : b.dataset.sub;
-  state.type = null;
-  renderCatChips();
-  loadProducts();
-});
-$('typecats').addEventListener('click', e => {
-  const b = e.target.closest('[data-type]'); if (!b) return;
-  state.type = state.type === b.dataset.type ? null : b.dataset.type;
-  renderCatChips();
-  loadProducts();
-});
 // Pick up category changes made elsewhere without a page reload.
 window.addEventListener('focus', () => loadCategories().then(changed => { if (changed) loadProducts(); }).catch(() => {}));
 
