@@ -109,4 +109,33 @@ function importRows(db, rows, defaults = {}) {
   return { added, updated, stores, skipped, problems };
 }
 
-module.exports = { importRows, storeFromUrl, money, MAX_ROWS };
+// End dates as people type them in Excel: 2026-12-31, 31/12/2026, 31-12-26, or Excel's own day
+// number (days since 1899-12-30) when the cell is formatted as a date. Returns YYYY-MM-DD, '' or null if unreadable.
+function dateOf(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  let y, m, d, t;
+  if ((t = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/))) [, y, m, d] = t;
+  else if ((t = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/))) { [, d, m, y] = t; if (y.length === 2) y = '20' + y; }
+  else if (/^\d{5}(\.\d+)?$/.test(s)) return new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(s)) * 864e5).toISOString().slice(0, 10);
+  else return null;
+  const date = new Date(Date.UTC(+y, +m - 1, +d));
+  if (date.getUTCMonth() !== +m - 1 || date.getUTCDate() !== +d) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+// Checks one deal (from the Add deal form or a sheet row). Returns { deal } or { errors }.
+function checkDeal(b = {}) {
+  const str = (v, n) => String(v ?? '').trim().slice(0, n);
+  const title = str(b.title, 160), url = str(b.url, 2000), image = str(b.image, 2000);
+  const endsAt = dateOf(b.endsAt);
+  const errors = [];
+  if (!title) errors.push('Give the deal a title.');
+  if (!/^https:\/\/\S+$/.test(url)) errors.push('Paste the deal link, starting with https://.');
+  if (image && !/^https:\/\/\S+$/.test(image)) errors.push('The photo link must start with https://.');
+  if (endsAt === null) errors.push('Write the end date as YYYY-MM-DD or DD/MM/YYYY.');
+  if (errors.length) return { errors };
+  return { deal: { title, url, image: image || null, endsAt: endsAt || null, store: str(b.store, 60), code: str(b.code, 40) || null, description: str(b.description, 300) } };
+}
+
+module.exports = { importRows, storeFromUrl, money, dateOf, checkDeal, httpsLink, MAX_ROWS };

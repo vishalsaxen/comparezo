@@ -103,3 +103,29 @@ test('sheet.js writes an .xlsx and reads it back, and reads CSV', async () => {
   assert.deepEqual(Sheet.readCsv('﻿Name,URL\r\n"Pen, blue","https://a.com"\n'), [['Name', 'URL'], ['Pen, blue', 'https://a.com']]);
   assert.deepEqual(Sheet.readCsv('Name;Price\nPen;10'), [['Name', 'Price'], ['Pen', '10']]);
 });
+
+test('owner uploads deals from a sheet: dates in common formats, duplicates skipped, bad rows reported', async () => {
+  const { dateOf } = require('../server/bulk');
+  assert.deepEqual(['2026-12-31', '31/12/2026', '1-2-27', '46387', '31/02/2026', 'soon', ''].map(dateOf), ['2026-12-31', '2026-12-31', '2027-02-01', '2026-12-31', null, null, '']);
+  await withServer(async base => {
+    const post = rows => fetch(`${base}/api/admin/my-deals/bulk`, { method: 'POST', headers: h, body: JSON.stringify({ rows }) });
+    assert.equal((await fetch(`${base}/api/admin/my-deals/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"rows":[]}' })).status, 401);
+    assert.equal((await post([])).status, 400);
+    const rows = [
+      { row: 2, title: '40% off shoes', url: 'https://www.myntra.com/shoes', code: 'RUN40', endsAt: '31/12/2999' },
+      { row: 3, title: 'Big sale', url: 'http://www.ajio.com/sale', store: 'AJIO' },
+      { row: 4, title: 'Same link, other code', url: 'https://www.myntra.com/shoes', code: 'RUN50' },
+      { row: 5, title: 'No link' },
+      { row: 6, title: 'Bad date', url: 'https://www.nykaa.com/x', endsAt: 'next week' },
+    ];
+    const r = await (await post(rows)).json();
+    assert.deepEqual([r.added, r.skipped, r.problems.map(p => p.row)], [3, 0, [5, 6]]);
+    const saved = await (await fetch(`${base}/api/admin/my-deals`, { headers: h })).json();
+    const shoes = saved.find(d => d.code === 'RUN40');
+    assert.deepEqual([shoes.store, shoes.ends_at], ['Myntra', '2999-12-31']);
+    assert.equal(saved.find(d => d.title === 'Big sale').url, 'https://www.ajio.com/sale');
+    const again = await (await post(rows.slice(0, 3))).json();
+    assert.deepEqual([again.added, again.skipped], [0, 3]);
+    assert.equal((await (await fetch(`${base}/api/deals`)).json()).deals.filter(d => d.id.startsWith('my-')).length, 3);
+  });
+});
