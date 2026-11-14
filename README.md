@@ -95,6 +95,14 @@ With Firestore connected (see above), products added on that page are kept acros
 
 The page lists every product, and **Delete** removes it from the site and the database (Linezo keeps its click history). Once you've entered the admin key, product pages on the main site also show a **Delete this product** button in that browser. Products in `server/catalog.json` load on every start, and a product taken out of that file is removed from the site on the next start. Every product in that file loads on start (`server/catalog.js`), and `npm test` checks the file is valid.
 
+### Uploading products from Excel
+
+Under **Upload products from Excel** on `/products.html`, upload an `.xlsx` or `.csv` file with one store link per row: **Name**, **Image**, **URL** and **Price**, plus optional MRP, Delivery, Store, Category, Sub-category, Type and Details. **Download the Excel template** gives the layout. Rows with the same name become one product with several stores; a product already on the site gets the new links added; links already there are skipped. Rows without a Category use the category picked on the page. Up to 500 rows per upload. The browser reads the file (`public/sheet.js`, no outside library) and sends the rows to `POST /api/admin/products/bulk` (`server/bulk.js`).
+
+**Download with affiliate links** returns the same sheet with an "Affiliate link" column: each URL goes to EarnKaro first, then to Admitad's deeplink API for stores your Admitad website has joined (`POST /api/admin/affiliate-links`). The Admitad part signs in with the scopes `advcampaigns_for_website deeplink_generator`, which must be allowed for your Admitad API app. Neither EarnKaro nor Admitad provides product names, photos or prices, so those come from your sheet. ExtraPe has no API and its Chrome extension can't run inside a website; paste ExtraPe links in the URL column and fill in Store.
+
+**Download all products as Excel** saves every product in the same layout, so it doubles as a backup you can upload again.
+
 ## Earning commission with Cuelinks
 
 Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). The page then loads `/affiliate.js`, which loads Cuelinks' script. When a shopper clicks "Buy on Flipkart", "Buy on Myntra" and so on, Cuelinks turns the link into a commission-earning link for any store you're approved for. Without `CUELINKS_CID`, `/affiliate.js` does nothing.

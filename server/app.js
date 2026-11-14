@@ -11,6 +11,7 @@ const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
+const { importRows } = require('./bulk');
 
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
@@ -150,6 +151,35 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const r = addProduct(db, req.body, 'manual');
     if (r.errors) return res.status(400).json({ errors: r.errors });
     res.status(201).json(manualProducts().find(p => p.id === r.id));
+  });
+  // Many products at once, from the spreadsheet the owner uploads (see bulk.js).
+  app.post('/api/admin/products/bulk', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    const r = importRows(db, b.rows, b.defaults || {});
+    if (r.error) return res.status(400).json({ error: r.error });
+    res.json(r);
+  });
+
+  // Turns store product links into commission links: EarnKaro first, then Admitad for stores
+  // the Admitad website has joined. Used to fill the "Affiliate link" column of a sheet.
+  app.post('/api/admin/affiliate-links', requireAdmin, async (req, res) => {
+    const urls = Array.isArray(req.body && req.body.urls) ? req.body.urls.slice(0, 25).map(u => String(u || '').trim()) : [];
+    const one = async url => {
+      if (!/^https:\/\/\S+$/.test(url)) return { url, link: null, via: null, note: 'Not an https:// link.' };
+      if (earnkaro.connected) {
+        const link = await earnkaro.convert(url);
+        if (link && link !== url) return { url, link, via: 'EarnKaro' };
+      }
+      if (admitad.connected && admitad.deeplink) {
+        const r = await admitad.deeplink(url);
+        if (r.link) return { url, link: r.link, via: 'Admitad' };
+        return { url, link: null, via: null, note: (earnkaro.connected ? 'EarnKaro could not convert it. ' : '') + `Admitad: ${r.error}` };
+      }
+      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY or the ADMITAD_* keys on the server.' };
+    };
+    const results = [];
+    for (let i = 0; i < urls.length; i += 5) results.push(...await Promise.all(urls.slice(i, i + 5).map(one)));
+    res.json({ earnkaro: earnkaro.connected, admitad: !!admitad.connected, results });
   });
   app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
