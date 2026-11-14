@@ -103,3 +103,26 @@ test('Earnings: a failing API falls back to typed-in numbers and shows the error
     assert.equal(ad.figures.thisMonth.confirmed, 9);
   }, { admitad });
 });
+
+const { createPartnerize } = require('../server/partnerize');
+test('Earnings: Partnerize conversions are summed by status, following next pages', async () => {
+  const calls = [];
+  const fetch = async (url, opts) => {
+    calls.push({ url, auth: opts.headers.Authorization });
+    const conv = (status, amount, currency = 'INR') => ({ conversion_data: { currency, conversion_value: { conversion_status: status, publisher_commission: amount } } });
+    if (url.includes('cursor_id=2')) return { ok: true, status: 200, json: async () => ({ conversions: [conv('approved', '30')] }) };
+    return { ok: true, status: 200, json: async () => ({ conversions: [conv('pending', 10.5), conv('approved', 20), conv('rejected', 99)],
+      hypermedia: { pagination: { next_page: '/reporting/report_publisher/publisher/p1/conversion.json?cursor_id=2' } } }) };
+  };
+  const partnerize = createPartnerize({ appKey: 'app', apiKey: 'usr', publisherId: 'p1', fetch, now: () => NOW });
+  await withServer(async call => {
+    const pz = (await call('GET', '/api/admin/earnings')).body.networks.find(n => n.id === 'partnerize');
+    assert.equal(pz.source, 'api');
+    assert.deepEqual(pz.figures.thisMonth, { pending: 10.5, confirmed: 50, paid: null });
+    assert.equal(pz.dashboard, 'https://console.partnerize.com/payments/payments');
+    assert.equal(calls[0].auth, 'Basic ' + Buffer.from('app:usr').toString('base64'));
+    assert.ok(calls.some(c => c.url.startsWith('https://api.partnerize.com/reporting/report_publisher/publisher/p1/conversion.json?start_date=2026-11-01+00%3A00%3A00')));
+    assert.ok(calls.some(c => c.url.includes('cursor_id=2')));
+  }, { partnerize });
+  assert.deepEqual(await createPartnerize().earnings(), { connected: false });
+});

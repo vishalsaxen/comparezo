@@ -11,6 +11,7 @@ const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
+const { createPartnerize } = require('./partnerize');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 
@@ -18,7 +19,7 @@ const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -260,7 +261,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
 
   // Earnings page: money earned per affiliate network (see earnings.js). Owner only.
-  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals }, connected: { earnkaro: !!earnkaro.connected } });
+  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected } });
   app.get('/api/admin/earnings', requireAdmin, async (req, res) => res.json(await earnings.report({ refresh: req.query.refresh === '1' })));
   app.post('/api/admin/earnings', requireAdmin, (req, res) => {
     const r = earnings.save(req.body);

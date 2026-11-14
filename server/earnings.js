@@ -10,7 +10,7 @@
 //             Keys are off on Render until the new account is approved.
 //   EarnKaro  no: its API only converts links. Type the numbers from the EarnKaro app.
 //   ExtraPe   no API at all. Type the numbers in.
-//   Partnerize not connected yet (no brands joined). Type the numbers in.
+//   Partnerize yes: conversion report API, see partnerize.js (PARTNERIZE_* keys). Unverified with real keys.
 //
 // Amounts: pending = waiting for the store to confirm, confirmed = approved but not paid out yet,
 // paid = already paid to you. Months are YYYY-MM.
@@ -19,8 +19,8 @@ const NETWORKS = [
   { id: 'earnkaro', name: 'EarnKaro', dashboard: 'https://earnkaro.com/', how: 'EarnKaro has no earnings API, so type the numbers from the EarnKaro app or website.' },
   { id: 'admitad', name: 'Admitad', dashboard: 'https://store.admitad.com/', how: 'Read from the Admitad statistics API.' },
   { id: 'cuelinks', name: 'Cuelinks', dashboard: 'https://www.cuelinks.com/dashboard', how: 'Read from the Cuelinks earnings report API.' },
-  { id: 'extrape', name: 'ExtraPe', dashboard: 'https://www.extrape.com/', how: 'ExtraPe has no API, so type the numbers in.' },
-  { id: 'partnerize', name: 'Partnerize', dashboard: 'https://console.partnerize.com/', how: 'Not connected yet. Type the numbers in once you earn there.' },
+  { id: 'extrape', name: 'ExtraPe', dashboard: 'https://www.extrape.com/my-earnings', how: 'ExtraPe has no API, so copy the numbers from My Earnings and type them in.' },
+  { id: 'partnerize', name: 'Partnerize', dashboard: 'https://console.partnerize.com/payments/payments', how: 'Read from the Partnerize conversion report API.' },
 ];
 const IDS = new Set(NETWORKS.map(n => n.id));
 
