@@ -6,7 +6,7 @@
 <title>Add products · Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-14c">
+<link rel="stylesheet" href="/styles.css?v=2026-11-14d">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -24,13 +24,85 @@
 <main class="wrap cat-admin">
   <div class="eyebrow">Admin</div>
   <h1 class="lz-title">Add products</h1>
-  <p class="lede">Pick a product on Flipkart, Amazon, Myntra or any store, then paste its link and today's price here. Add the same product from several stores so shoppers can compare. With Cuelinks switched on, every "Buy" click on these links can earn you commission.</p>
+  <p class="lede">Search for a product by name to find it in the stores Comparezo is connected to, tick the listings that are the same product and add them as one product that shoppers compare on the Comparezo tab. You can still add any store by pasting its link.</p>
 
   <form class="panel pad key-row" id="keyForm">
     <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
     <button class="btn btn-brand" type="submit">Unlock</button>
     <span id="keyStatus" role="status"></span>
   </form>
+
+  <section id="findWrap" class="cat-admin" style="padding:0" hidden>
+    <section class="panel find" aria-labelledby="findTitle">
+      <div class="find-head">
+        <h2 id="findTitle">1. Find the product in stores</h2>
+        <span class="sub" id="findSummary"></span>
+      </div>
+      <form class="search" id="findForm" role="search">
+        <input id="findQ" maxlength="120" aria-label="Product name" placeholder="e.g. boAt Airdopes 141, Nescafé Classic 200g">
+        <button class="btn btn-brand" type="submit" id="findBtn">Search stores</button>
+      </form>
+      <div class="find-bar" id="findBar" hidden>
+        <div class="chips" id="findChips" aria-label="Filter by store"></div>
+        <div class="seg" id="findSort" aria-label="Sort">
+          <button type="button" data-sort="match" aria-pressed="true">Best match</button>
+          <button type="button" data-sort="price" aria-pressed="false">Lowest price</button>
+        </div>
+      </div>
+      <div id="findOnSite" hidden></div>
+      <div class="rgrid" id="findResults"></div>
+      <div class="src-note" id="findSources" hidden></div>
+      <div class="src-note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16v.5"/></svg>
+        <span>Results come only from official store APIs and affiliate product feeds (Amazon Creators API, Flipkart Affiliate API, Admitad product feeds), never from copying store pages. A store without a feed can be added in step 2 by pasting its link.</span>
+      </div>
+    </section>
+
+    <div class="tray" id="findTray" hidden>
+      <div class="stack" id="findStack"></div>
+      <div class="txt" id="findTrayTxt"></div>
+      <button type="button" class="btn btn-ghost small" id="findClear">Clear</button>
+      <a class="btn btn-brand" href="#reviewTitle">Review and add</a>
+    </div>
+
+    <section class="panel find" aria-labelledby="reviewTitle" id="reviewWrap" hidden>
+      <div class="find-head">
+        <h2 id="reviewTitle">2. Check details and add as one product</h2>
+        <span class="sub" id="reviewCount"></span>
+      </div>
+      <div class="review">
+        <form class="sell-form" id="reviewForm" novalidate>
+          <div class="field full"><label for="r-name">Product name on Comparezo</label><input id="r-name" maxlength="200"><span class="hint">Filled from the store titles. Shorten it if you like.</span></div>
+          <div class="field"><label for="r-cat">Category</label><select id="r-cat"></select></div>
+          <div class="field"><label for="r-sub">Sub-category</label><select id="r-sub"></select></div>
+          <div class="field" id="r-type-wrap" hidden><label for="r-type">Type</label><select id="r-type"></select></div>
+          <div class="field full"><label for="r-spec">Short details</label><input id="r-spec" maxlength="200" placeholder="e.g. Bluetooth 5.3 · 42 h playback · IPX4"></div>
+          <div class="field full"><span class="label">Main photo</span><div class="photo-pick" id="photoPick"></div><span class="hint">Pick which store's photo to show. The image link is saved with the product.</span></div>
+          <div class="field full">
+            <span class="label">Stores to compare</span>
+            <div class="tablebox">
+              <table class="sel-table">
+                <thead><tr><th>Store</th><th class="r">Price</th><th>Link</th><th></th></tr></thead>
+                <tbody id="selRows"></tbody>
+              </table>
+            </div>
+            <div id="r-offers" class="offer-rows" style="margin-top:10px"></div>
+            <button type="button" class="btn btn-ghost small" id="r-addOffer">+ Add another store by link</button>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-brand" type="submit" id="r-add">Add as one product</button>
+            <span id="r-status" role="status"></span>
+          </div>
+        </form>
+        <aside class="preview-card">
+          <div class="eyebrow" style="margin-bottom:8px">Shoppers will see</div>
+          <div id="r-preview"></div>
+          <p class="sub" style="margin:10px 0 0">Under the Comparezo tab, with every store side by side and the cheapest marked.</p>
+        </aside>
+      </div>
+    </section>
+    <h2 id="manualHead">Or add a product by hand</h2>
+  </section>
 
   <form class="panel pad sell-form" id="productForm" novalidate hidden>
     <div class="field full"><label for="p-name">Product name</label><input id="p-name" maxlength="200" placeholder="e.g. Single-line notebook, 172 pages, pack of 6"></div>
@@ -119,6 +191,6 @@
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/sheet.js"></script>
-<script src="/products-admin.js"></script>
+<script src="/products-admin.js?v=2026-11-14d"></script>
 </body>
 </html>

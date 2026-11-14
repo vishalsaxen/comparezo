@@ -14,12 +14,16 @@ const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
+const { createStoreSearch } = require('./store-search');
 
+
+// Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
+const isAdmitadLink = u => { try { return /(^|\.)admitad\.com$/.test(new URL(u).hostname); } catch { return false; } };
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), storeSearch = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -126,7 +130,8 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const o = db.prepare('SELECT o.*, p.name AS product_name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.id = ?').get(Number(req.params.offerId));
     const url = o && buyUrl(o, o.product_name);
     if (!url) return res.status(404).type('text/plain').send('This store link is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(url));
+    // Links that came from an Admitad feed already earn commission, so they are not sent to EarnKaro.
+    res.set('Cache-Control', 'no-store').redirect(302, isAdmitadLink(url) ? url : await earnkaro.convert(url));
   });
 
   // Record a Buy click (the shopper is sent to the store). This is what Linezo tracks.
@@ -183,6 +188,17 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     for (let i = 0; i < urls.length; i += 5) results.push(...await Promise.all(urls.slice(i, i + 5).map(one)));
     res.json({ earnkaro: earnkaro.connected, admitad: !!admitad.connected, results });
   });
+  // "Find in stores": search every connected store's official API or product feed by name.
+  if (!storeSearch) {
+    const status = feedRunner.status ? feedRunner.status() : { notConnected: {} };
+    const sources = [...(feedRunner.searchers ? feedRunner.searchers() : [])];
+    const notConnected = { ...(status.notConnected || {}) };
+    if (admitad.connected && admitad.findProducts) sources.push({ name: 'Admitad', find: admitad.findProducts });
+    else notConnected.Admitad = 'Set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to search the product feeds of stores you joined in Admitad.';
+    notConnected.EarnKaro = 'EarnKaro only turns links into commission links. It has no product search, so stores you reach through EarnKaro are added by pasting their link.';
+    storeSearch = createStoreSearch(db, { sources, notConnected });
+  }
+  app.get('/api/admin/store-search', requireAdmin, async (req, res) => res.json(await storeSearch.search(req.query.q)));
   app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
     const p = db.prepare('SELECT id FROM products WHERE id = ?').get(id);

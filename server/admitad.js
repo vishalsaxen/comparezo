@@ -8,11 +8,18 @@
 //          advcampaigns_for_website + deeplink_generator, so coupons keep working if those are off.
 //          GET /advcampaigns/website/<website id>/?connection_status=active  -> joined stores
 //          GET /deeplink/<website id>/advcampaign/<campaign id>/?ulp=<link>  -> ["https://ad.admitad.com/g/…"]
+// Products: findProducts(q) reads the product feeds of joined stores (feeds_info[].csv_link, or
+//          products_csv_link, in the same joined-stores list) and keeps the rows whose name matches.
+//          Each feed is read as a stream and stopped early, so a big feed doesn't fill the free
+//          server's memory. Admitad documents those link fields; the CSV columns (name, price,
+//          oldprice, picture, url, currencyId) follow the usual Admitad/YML feed layout and are
+//          not yet checked against a real feed.
 // Earnings: GET /statistics/campaigns/?website=<id>&date_start=dd.mm.yyyy&date_end=dd.mm.yyyy
 //          (scope "statistics"). Each row has payment_sum_open (pending), payment_sum_approved
 //          (confirmed), payment_sum_declined and currency. The field names are from Admitad's
 //          "Publisher reports" docs; the scope name is not confirmed there, so check it with the real keys.
 // Coupons are cached for an hour so the free server doesn't call Admitad on every visit.
+const { storeFromUrl } = require('./bulk');
 const API = 'https://api.admitad.com';
 const TTL_MS = 60 * 60 * 1000;
 
@@ -40,7 +47,8 @@ function toDeal(c) {
   };
 }
 
-function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 500, maxPages = 10 } = {}) {
+function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 500, maxPages = 10,
+  feedMaxBytes = 40 * 1024 * 1024, feedTimeoutMs = 12000 } = {}) {
   const connected = !!(clientId && clientSecret && websiteId);
   const tokens = {};   // scope -> { value, until }
   let cache = null;   // { at, deals, error }
@@ -118,7 +126,12 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     try {
       const body = await get(`/advcampaigns/website/${encodeURIComponent(websiteId)}/?connection_status=active&limit=500`);
       const list = (Array.isArray(body && body.results) ? body.results : [])
-        .map(c => ({ id: c.id, name: String(c.name || ''), host: hostOf(httpsUrl(c.site_url) || '') })).filter(c => c.id && c.host);
+        .map(c => {
+          const site = httpsUrl(c.site_url) || '';
+          const feeds = [...(Array.isArray(c.feeds_info) ? c.feeds_info.map(f => f && f.csv_link) : []), c.products_csv_link]
+            .map(httpsUrl).filter(Boolean);
+          return { id: c.id, name: String(c.name || ''), host: hostOf(site), store: storeFromUrl(site) || String(c.name || ''), feeds: [...new Set(feeds)] };
+        }).filter(c => c.id && c.host);
       joined = { at: now(), list };
     } catch (e) { joined = { at: now() - TTL_MS + 5 * 60 * 1000, list: joined ? joined.list : [], error: e.message }; }
     return joined;
@@ -135,6 +148,51 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
       const link = (JSON.stringify(body || '').replace(/\\\//g, '/').match(/https:\/\/[^\s"'<>\\]+/g) || []).find(l => l !== url);
       return link ? { link, store: c.name } : { error: 'Admitad sent no link back.' };
     } catch (e) { return { error: e.message }; }
+  }
+
+  // Product search over the joined stores' product feeds. Returns listings for store-search.js.
+  async function findProducts(q, { limit = 20, matches = () => true, maxStores = 10, maxFeedsPerStore = 2 } = {}) {
+    if (!connected) return [];
+    const { list, error } = await joinedStores();
+    const withFeeds = list.filter(c => c.feeds.length).slice(0, maxStores);
+    if (!withFeeds.length) {
+      if (error) throw new Error(error);
+      return [];
+    }
+    const found = [];
+    await Promise.all(withFeeds.map(async c => {
+      let mine = 0;
+      for (const feed of c.feeds.slice(0, maxFeedsPerStore)) {
+        if (mine >= limit) break;
+        try {
+          for (const row of await readFeed(feed, { matches, limit: limit - mine })) { found.push({ ...row, store: c.store }); mine++; }
+        } catch { /* one broken feed shouldn't stop the others */ }
+      }
+    }));
+    return found;
+  }
+
+  async function readFeed(url, { matches, limit, maxBytes = feedMaxBytes, timeoutMs = feedTimeoutMs }) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    const out = [];
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok || !r.body) throw new Error(`feed ${r.status}`);
+      const parser = feedParser();
+      const decoder = new TextDecoder();
+      let bytes = 0;
+      for await (const chunk of r.body) {
+        bytes += chunk.length;
+        for (const row of parser.push(decoder.decode(chunk, { stream: true }))) {
+          const item = feedItem(row);
+          if (item && matches(item.title)) { out.push(item); if (out.length >= limit) break; }
+        }
+        if (out.length >= limit || bytes >= maxBytes) break;
+      }
+    } catch (e) { if (!out.length && e.name !== 'AbortError') throw e; }
+    finally { clearTimeout(t); ctl.abort(); }
+    return out;
   }
 
   // Money earned, for the Earnings page: this month and since 2020, summed over every store.
@@ -176,7 +234,67 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     return result;
   }
 
-  return { list, check, deeplink, earnings, connected };
+  return { list, check, deeplink, earnings, findProducts, connected };
 }
 
-module.exports = { createAdmitad, toDeal };
+// Reads CSV text piece by piece and gives back rows as { column: value } objects.
+// Admitad feeds are usually separated by ";"; "," and tabs work too. Quoted values may hold the separator or line breaks.
+function feedParser() {
+  let buf = '', header = null, sep = ';';
+  function split(line) {
+    const cells = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) {
+        if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === sep) { cells.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    cells.push(cur);
+    return cells;
+  }
+  return {
+    push(text) {
+      buf += text;
+      const rows = [];
+      let start = 0, q = false;
+      for (let i = 0; i < buf.length; i++) {
+        const ch = buf[i];
+        if (ch === '"') q = !q;
+        else if (ch === '\n' && !q) {
+          const line = buf.slice(start, i).replace(/\r$/, '');
+          start = i + 1;
+          if (!line.trim()) continue;
+          if (!header) {
+            const counts = [';', ',', '\t'].map(c => [c, line.split(c).length]);
+            sep = counts.sort((a, b) => b[1] - a[1])[0][0];
+            header = split(line).map(h => h.trim().toLowerCase().replace(/^\ufeff/, ''));
+            continue;
+          }
+          const cells = split(line);
+          rows.push(Object.fromEntries(header.map((h, k) => [h, cells[k] ?? ''])));
+        }
+      }
+      buf = buf.slice(start);
+      return rows;
+    },
+  };
+}
+
+// A feed row -> a listing, or null if it is out of stock, not in rupees, or has no name, price or link.
+function feedItem(row) {
+  const pick = (...keys) => { for (const k of keys) if (row[k] !== undefined && String(row[k]).trim() !== '') return String(row[k]).trim(); return ''; };
+  const title = pick('name', 'title', 'model', 'product_name');
+  const price = Number(pick('price', 'sale_price').replace(/[^\d.]/g, ''));
+  const url = httpsUrl(pick('url', 'link', 'deeplink', 'product_url'));
+  if (!title || !(price > 0) || !url) return null;
+  if (/^(false|0|no|out of stock)$/i.test(pick('available', 'availability', 'in_stock'))) return null;
+  const currency = pick('currencyid', 'currency').toUpperCase();
+  if (currency && currency !== 'INR' && currency !== 'RS') return null;
+  const image = httpsUrl(pick('picture', 'image', 'image_link', 'imageurl', 'picture_url').split(/[,|]\s*(?=https?:)/)[0]);
+  const mrp = Number(pick('oldprice', 'old_price', 'mrp', 'list_price').replace(/[^\d.]/g, ''));
+  return { title, price, mrp: mrp > price ? mrp : null, url, image };
+}
+
+module.exports = { createAdmitad, toDeal, feedParser, feedItem };

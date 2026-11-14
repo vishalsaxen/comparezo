@@ -39,7 +39,7 @@ $('p-cat').addEventListener('change', fillSubs);
 $('p-sub').addEventListener('change', fillTypes);
 
 /* Store rows */
-function addOfferRow() {
+function addOfferRow(box = $('offers')) {
   const row = document.createElement('div');
   row.className = 'offer-row';
   row.innerHTML = `
@@ -56,9 +56,10 @@ function addOfferRow() {
     const hit = Object.keys(guess).find(d => host === d || host.endsWith('.' + d));
     if (hit) row.querySelector('[data-f=store]').value = guess[hit];
   });
-  $('offers').appendChild(row);
+  box.appendChild(row);
+  return row;
 }
-$('addOffer').addEventListener('click', addOfferRow);
+$('addOffer').addEventListener('click', () => addOfferRow());
 $('offers').addEventListener('click', e => {
   if (!e.target.closest('[data-remove]')) return;
   if ($('offers').children.length > 1) e.target.closest('.offer-row').remove();
@@ -364,12 +365,177 @@ $('dealBulkForm').addEventListener('submit', async e => {
   finally { $('dealBulkAdd').disabled = false; }
 });
 
+/* Find in stores: search connected stores by name, tick listings, add them as one product. */
+const STORE_COLORS = { 'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c', 'JioMart': '#1f7a8c', 'Snapdeal': '#d23b3b', 'Ajio': '#2c4152', 'BigBasket': '#689f38', 'FirstCry': '#f2711c', 'Nykaa': '#e80071', 'Croma': '#159a8c', 'Reliance Digital': '#c8102e', 'Tata CLiQ': '#8a2be2' };
+const colorOf = s => STORE_COLORS[s] || '#6b7d78';
+const sdot = s => `<span class="sdot" style="background:${colorOf(s)}"></span>`;
+const BOX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>';
+const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const img = (url, alt = '') => url ? `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer" data-fallback>` : BOX;
+// A store photo that fails to load is swapped for the plain box drawing.
+document.addEventListener('error', e => { const t = e.target; if (t.tagName === 'IMG' && t.hasAttribute('data-fallback')) t.outerHTML = BOX; }, true);
+
+const find = { results: [], store: 'all', sort: 'match', picked: new Set(), photo: null, nameEdited: false };
+
+function reviewSubs() {
+  const c = tree.find(x => x.name === $('r-cat').value);
+  const subs = c ? c.subcategories : [];
+  $('r-sub').innerHTML = subs.length ? opts(subs, 'Pick a sub-category') : '<option value="">None</option>';
+  $('r-sub').disabled = !subs.length;
+  reviewTypes();
+}
+function reviewTypes() {
+  const c = tree.find(x => x.name === $('r-cat').value);
+  const s = c && c.subcategories.find(x => x.name === $('r-sub').value);
+  const types = s ? s.types : [];
+  $('r-type-wrap').hidden = !types.length;
+  $('r-type').innerHTML = types.length ? opts(types, 'Pick a type') : '';
+}
+$('r-cat').addEventListener('change', reviewSubs);
+$('r-sub').addEventListener('change', reviewTypes);
+
+$('findForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('findQ').value.trim();
+  if (!q) { $('findQ').focus(); return; }
+  $('findBtn').disabled = true; $('findBtn').textContent = 'Searching…';
+  $('findSummary').textContent = 'Asking the connected stores. This can take a few seconds.';
+  try {
+    const r = await call('GET', `/api/admin/store-search?q=${encodeURIComponent(q)}`);
+    Object.assign(find, { searched: true, results: r.results || [], store: 'all', picked: new Set(), photo: null, nameEdited: false });
+    (r.results || []).filter(x => x.match === 'exact').forEach(x => { if (![...find.picked].some(id => find.results[id - 1].store === x.store)) find.picked.add(x.id); });
+    $('findSummary').textContent = r.error || `${find.results.length} listing${find.results.length === 1 ? '' : 's'} from ${new Set(find.results.map(x => x.store)).size} store${new Set(find.results.map(x => x.store)).size === 1 ? '' : 's'}`;
+    $('findOnSite').hidden = !(r.onSite && r.onSite.length);
+    $('findOnSite').innerHTML = (r.onSite || []).length ? `<div class="onsite">Already on Comparezo: ${r.onSite.map(p => `<strong>${esc(p.name)}</strong> (${p.storeCount} store${p.storeCount === 1 ? '' : 's'}${p.lowest ? ', from ' + inr(p.lowest) : ''})`).join(', ')}. Check it isn't the same product before adding.</div>` : '';
+    renderSources(r);
+    renderFind();
+  } catch (err) { $('findSummary').textContent = err.message; }
+  finally { $('findBtn').disabled = false; $('findBtn').textContent = 'Search stores'; }
+});
+
+function renderSources(r) {
+  const parts = (r.sources || []).map(s => s.ok ? `<strong>${esc(s.name)}</strong>: ${s.count} found` : `<strong>${esc(s.name)}</strong>: <span class="err">${esc(s.error)}</span>`);
+  const off = Object.entries(r.notConnected || {});
+  $('findSources').hidden = !parts.length && !off.length;
+  $('findSources').innerHTML = `<span>${parts.length ? 'Searched ' + parts.join(' · ') + '.' : 'No store search is connected yet, so nothing can be found by name.'}
+    ${off.length ? `<details style="margin-top:6px"><summary>Not searched (${off.length})</summary><ul class="src-list">${off.map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`).join('')}</ul></details>` : ''}</span>`;
+}
+
+function renderFind() {
+  const counts = {};
+  find.results.forEach(r => { counts[r.store] = (counts[r.store] || 0) + 1; });
+  $('findBar').hidden = !find.results.length;
+  $('findChips').innerHTML = `<button type="button" class="chip" data-s="all" aria-pressed="${find.store === 'all'}">All stores<span class="n">${find.results.length}</span></button>` +
+    Object.keys(counts).sort().map(s => `<button type="button" class="chip" data-s="${esc(s)}" aria-pressed="${find.store === s}">${sdot(s)}${esc(s)}<span class="n">${counts[s]}</span></button>`).join('');
+  let rows = find.results.filter(r => find.store === 'all' || r.store === find.store);
+  rows = rows.slice().sort(find.sort === 'price' ? (a, b) => a.price - b.price : (a, b) => a.id - b.id);
+  $('findResults').innerHTML = rows.length ? rows.map(r => {
+    const on = find.picked.has(r.id);
+    const off = r.mrp ? Math.round((1 - r.price / r.mrp) * 100) : 0;
+    return `<label class="rcard${on ? ' sel' : ''}" data-id="${r.id}">
+      <input type="checkbox" ${on ? 'checked' : ''} aria-label="Select ${esc(r.store)}: ${esc(r.title)}">
+      <span class="pick">${TICK}</span>
+      <div class="rimg">${img(r.image, r.title)}</div>
+      <div class="rbody">
+        <div class="rstore"><span style="display:flex;align-items:center">${sdot(r.store)}${esc(r.store)}</span><span class="match ${r.match}">${r.match === 'exact' ? 'Same product' : 'Similar'}</span></div>
+        <div class="rtitle" title="${esc(r.title)}">${esc(r.title)}</div>
+        <div class="rprice"><span class="p">${inr(r.price)}</span>${r.mrp ? `<span class="strike">${inr(r.mrp)}</span><span class="off">${off}% off</span>` : ''}</div>
+        <div class="links">
+          <b>URL</b><code title="${esc(r.url)}">${esc(r.url.replace('https://', ''))}</code><a href="${esc(r.url)}" target="_blank" rel="noopener">Open</a>
+          <b>Image</b>${r.image ? `<code title="${esc(r.image)}">${esc(r.image.replace('https://', ''))}</code><a href="${esc(r.image)}" target="_blank" rel="noopener">View</a>` : '<code>none</code><span></span>'}
+        </div>
+        <div><span class="pill brand">From ${esc(r.source)}</span></div>
+      </div>
+    </label>`;
+  }).join('') : (find.searched ? '<div class="empty-state" style="grid-column:1/-1">No listings found in the connected stores. Check the spelling, or add the product in step 2 by pasting store links.</div>' : '');
+  renderTray(); renderReview();
+}
+
+const picked = () => find.results.filter(r => find.picked.has(r.id)).sort((a, b) => a.price - b.price);
+function renderTray() {
+  const p = picked();
+  $('findTray').hidden = !p.length;
+  if (!p.length) return;
+  $('findStack').innerHTML = p.slice(0, 5).map(r => `<span style="background:${colorOf(r.store)}">${esc(r.store[0])}</span>`).join('');
+  $('findTrayTxt').innerHTML = `<strong>${p.length} listing${p.length > 1 ? 's' : ''} selected</strong><br>Cheapest ${inr(p[0].price)} at ${esc(p[0].store)}`;
+}
+
+// A short product name from the store titles: the shortest exact-match title, cut at the first comma or bracket.
+function suggestName(p) {
+  const exact = p.filter(r => r.match === 'exact');
+  const t = (exact.length ? exact : p).map(r => r.title.split(/\s*[,(|]\s*|\s+-\s+/)[0].trim()).sort((a, b) => a.length - b.length)[0] || '';
+  return t.length >= 6 ? t : (p[0] ? p[0].title.slice(0, 120) : '');
+}
+
+function renderReview() {
+  const p = picked(), extra = $('r-offers').children.length;
+  $('reviewWrap').hidden = !find.searched && !extra;
+  $('reviewCount').textContent = p.length + extra ? `${p.length + extra} store${p.length + extra > 1 ? 's' : ''}` : 'Nothing selected yet';
+  if (!find.nameEdited) $('r-name').value = p.length ? suggestName(p) : '';
+  if (!p.some(r => r.id === find.photo)) find.photo = (p.find(r => r.image) || {}).id || null;
+  const withPhoto = p.filter(r => r.image);
+  $('photoPick').innerHTML = withPhoto.length ? withPhoto.map(r => `<label title="${esc(r.store)} photo"><input type="radio" name="r-photo" value="${r.id}" ${r.id === find.photo ? 'checked' : ''}><span></span>${img(r.image)}</label>`).join('')
+    : '<span class="hint">No photo from the selected stores. You can add one later.</span>';
+  $('selRows').innerHTML = p.map((r, i) => `<tr class="${i === 0 ? 'best' : ''}">
+      <td><div class="store">${sdot(r.store)}${esc(r.store)}</div>${i === 0 ? '<span class="tag tag-best">Cheapest</span>' : ''}</td>
+      <td class="r num" style="font-weight:600">${inr(r.price)}</td>
+      <td><code title="${esc(r.url)}">${esc(r.url.replace('https://', ''))}</code></td>
+      <td class="r"><button type="button" class="btn btn-ghost small danger" data-unpick="${r.id}">Remove</button></td>
+    </tr>`).join('') || '<tr><td colspan="4" class="sub">Tick listings in step 1, or add a store by link below.</td></tr>';
+  const ph = p.find(r => r.id === find.photo);
+  $('r-preview').innerHTML = p.length ? `<article class="lcard">
+      <div class="img">${img(ph && ph.image)}</div>
+      <div class="body"><div class="sub">From</div><div class="price num">${inr(p[0].price)}</div><div class="t">${esc($('r-name').value)}</div>
+      <div class="sub">${sdot(p[0].store)}Cheapest at ${esc(p[0].store)}</div>
+      <div class="row"><span class="sub">Compare ${p.length + extra} store${p.length + extra > 1 ? 's' : ''}</span><span class="btn">Compare</span></div></div></article>`
+    : '<div class="empty-state">Your product card appears here.</div>';
+}
+
+$('findChips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; find.store = b.dataset.s; renderFind(); });
+$('findSort').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  find.sort = b.dataset.sort;
+  $('findSort').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderFind();
+});
+$('findResults').addEventListener('change', e => {
+  const c = e.target.closest('.rcard'); if (!c) return;
+  const id = Number(c.dataset.id);
+  if (e.target.checked) find.picked.add(id); else find.picked.delete(id);
+  renderFind();
+});
+$('selRows').addEventListener('click', e => { const b = e.target.closest('[data-unpick]'); if (!b) return; find.picked.delete(Number(b.dataset.unpick)); renderFind(); });
+$('photoPick').addEventListener('change', e => { find.photo = Number(e.target.value); renderReview(); });
+$('r-name').addEventListener('input', () => { find.nameEdited = true; renderReview(); });
+$('findClear').addEventListener('click', () => { find.picked.clear(); renderFind(); });
+$('r-addOffer').addEventListener('click', () => { addOfferRow($('r-offers')); renderReview(); });
+$('r-offers').addEventListener('click', e => { if (!e.target.closest('[data-remove]')) return; e.target.closest('.offer-row').remove(); renderReview(); });
+
+$('reviewForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p = picked();
+  const extra = [...$('r-offers').children].map(r => Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, i.value.trim()])));
+  const photo = p.find(r => r.id === find.photo);
+  const body = { name: $('r-name').value.trim(), category: $('r-cat').value, subCategory: $('r-sub').value, type: $('r-type').value,
+    spec: $('r-spec').value.trim(), image: photo ? photo.image : '',
+    offers: [...p.map(r => ({ store: r.store, price: r.price, mrp: r.mrp || undefined, url: r.url })), ...extra] };
+  const st = $('r-status');
+  try {
+    await call('POST', '/api/admin/products', body);
+    st.className = 'ok'; st.textContent = `Added "${body.name}" with ${body.offers.length} store${body.offers.length > 1 ? 's' : ''}. Shoppers now see it under Comparezo.`;
+    toast('Product added.');
+    Object.assign(find, { picked: new Set(), nameEdited: false });
+    $('r-offers').innerHTML = ''; $('r-spec').value = '';
+    renderFind(); loadList();
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+});
+
 /* Unlock */
 async function unlock() {
   try {
     await call('POST', '/api/admin/check');
     keyStore.set(key);
-    $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false;
+    $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false; $('findWrap').hidden = false;
     loadList(); loadMyDeals();
   } catch (err) {
     $('keyStatus').className = 'err';
@@ -400,7 +566,8 @@ $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('admi
   tree = await (await fetch('/api/categories')).json();
   $('p-cat').innerHTML = opts(tree, 'Pick a category');
   $('b-cat').innerHTML = opts(tree, 'Pick a category');
-  fillSubs(); bulkSubs(); resetForm();
+  $('r-cat').innerHTML = opts(tree, 'Pick a category');
+  fillSubs(); bulkSubs(); reviewSubs(); resetForm();
   if (key) unlock();
 })();
 })();
