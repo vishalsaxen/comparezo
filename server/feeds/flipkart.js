@@ -95,7 +95,14 @@ function createFlipkartFeed({ affiliateId, token, categories, fetch = globalThis
     return summary;
   }
 
-  return { name: STORE, run };
+  // "Find in stores" on the admin page: Flipkart's keyword search (Affiliate API 1.0).
+  async function find(q, { limit = 10 } = {}) {
+    const page = await get(`https://affiliate-api.flipkart.net/affiliate/1.0/search.json?query=${encodeURIComponent(q)}&resultCount=${Math.min(10, limit)}`);
+    return productsOf(page).filter(p => p.inStock !== false).map(p => toItem(p, []))
+      .map(i => ({ store: STORE, title: i.name, price: i.price, mrp: i.mrp, url: i.url, image: i.image }));
+  }
+
+  return { name: STORE, run, find };
 }
 
 module.exports = { createFlipkartFeed };
