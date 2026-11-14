@@ -29,7 +29,13 @@ button,input,select,textarea{font:inherit; color:inherit}
 /* Header + tabs */
 .top{position:sticky; top:0; z-index:5; background:var(--surface); border-bottom:1px solid var(--line)}
 .top-row{display:flex; align-items:center; gap:24px; padding-block:10px}
-.logo{font-family:var(--f-display); font-weight:800; font-size:22px; color:var(--ink); text-decoration:none; display:flex; align-items:center; gap:8px}
+.logo{font-family:var(--f-display); font-weight:800; font-size:22px; color:var(--ink); text-decoration:none; display:flex; align-items:center; gap:8px; padding-bottom:.55em}
+/* Wordmark: "Compare" + "zo" with a wide "E" under "zo" (reads Zoe). Colours follow the light/dark theme. */
+.wm{--wm-c:var(--ink); --wm-z:var(--brand); --wm-e:var(--marigold); font-family:var(--f-display); font-weight:800; letter-spacing:-.01em; display:inline-flex; align-items:flex-start; line-height:1; white-space:nowrap}
+.wm-c{color:var(--wm-c)}
+.wm-st{display:inline-flex; flex-direction:column; align-items:center; height:1em}
+.wm-z{color:var(--wm-z)}
+.wm-e{color:var(--wm-e); display:inline-block; font-size:1.22em; line-height:.8; margin-top:-.1em; transform:scaleX(1.7)}
 .tabs{display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px}
 .tabs a{padding:6px 16px; border-radius:7px; text-decoration:none; font-weight:700; color:var(--muted); font-size:14px}
 .tabs a[aria-selected="true"]{background:var(--brand); color:var(--surface)}
@@ -228,7 +234,7 @@ html.gated, html.gated body{overflow:hidden}
           mask:radial-gradient(22px 14px at 22px 100%, transparent 98%, #000) 0 0/44px 100% repeat-x;
   box-shadow:0 6px 14px rgba(0,0,0,.25)}
 .gate-center{position:relative; display:flex; flex-direction:column; align-items:center; gap:18px; padding:0 16px; text-align:center}
-.gate-sign{display:flex; align-items:center; gap:10px; background:var(--gate-plate); color:#14201d; padding:12px 22px 12px 14px; border-radius:12px;
+.gate-sign{display:flex; align-items:center; gap:10px; background:var(--gate-plate); color:#14201d; padding:12px 22px calc(12px + .55em); border-radius:12px;
   font-family:var(--f-display); font-weight:800; font-size:clamp(24px, 6vw, 34px); box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .gate-tag{width:58px; height:34px; background:var(--marigold); color:#14201d; font-family:var(--f-num); font-weight:600; font-size:18px;
   display:grid; place-items:center; position:relative; clip-path:polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%);
@@ -238,6 +244,7 @@ html.gated, html.gated body{overflow:hidden}
 @keyframes gate-swing{from{transform:rotate(-9deg)} to{transform:rotate(9deg)}}
 .gate-status{margin:0; max-width:36ch; font-size:15px; color:var(--gate-ink); opacity:.9; min-height:3em}
 .gate-handle{width:120px; height:12px; border-radius:6px; background:linear-gradient(180deg,#c7ccc9,#7f8784); box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.gate-sign .wm{--wm-c:#14201d; --wm-z:#0f5a4f; --wm-e:#f2a516}
 .gate.open{transform:translateY(-102%)}
 .gate.stuck .gate-tag{animation:none}
 @media (prefers-reduced-motion: reduce){
