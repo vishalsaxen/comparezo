@@ -156,8 +156,11 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     const { list, error } = await joinedStores();
     const withFeeds = list.filter(c => c.feeds.length).slice(0, maxStores);
     if (!withFeeds.length) {
-      if (error) throw new Error(error);
-      return [];
+      // Admitad answers 404 for a website that has no approved ad space or no joined stores yet.
+      if (error && !/\b404\b/.test(error)) throw new Error(error);
+      return { results: [], note: list.length
+        ? `None of your ${list.length} joined Admitad store${list.length === 1 ? '' : 's'} share a product feed, so there is nothing to search yet.`
+        : 'No joined stores yet. Admitad shows products once your ad space is approved and you join stores (programs) that share product feeds.' };
     }
     const found = [];
     await Promise.all(withFeeds.map(async c => {
