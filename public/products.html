@@ -95,6 +95,18 @@
         <span id="dealFormStatus" role="status"></span>
       </div>
     </form>
+    <h3>Upload deals from Excel</h3>
+    <p class="sub">Add many deals at once: one deal per row with the columns <strong>Title</strong> and <strong>URL</strong>, plus Store, Coupon code, Details, Image and Ends on if you have them. Dates can be 2026-12-31 or 31/12/2026. A deal with the same link and code as one already saved is skipped.</p>
+    <p><button type="button" class="btn btn-ghost small" id="dlDealTemplate">Download the deals template</button> <button type="button" class="btn btn-ghost small" id="dlDeals">Download my deals as Excel</button></p>
+    <form class="panel pad sell-form" id="dealBulkForm" novalidate>
+      <div class="field full"><label for="dealFile">Excel or CSV file</label><input id="dealFile" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></div>
+      <div class="field full" id="dealPreview" hidden></div>
+      <div class="form-actions">
+        <button class="btn btn-brand" type="submit" id="dealBulkAdd" disabled>Add these deals</button>
+        <span id="dealBulkStatus" role="status"></span>
+      </div>
+      <div class="field full" id="dealProblems" hidden></div>
+    </form>
     <h2>My deals</h2>
     <div id="myDeals" class="cat-tree"></div>
     <h2>Admitad deals</h2>

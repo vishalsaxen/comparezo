@@ -149,7 +149,7 @@ $('myDeals').addEventListener('click', async e => {
 
 /* Upload products from Excel (sheet.js reads and writes the files) */
 const COLUMNS = ['Name', 'Image', 'URL', 'Price', 'MRP', 'Delivery', 'Store', 'Category', 'Sub-category', 'Type', 'Details'];
-const FIELD_OF = {   // header text (lower case, letters only) -> field sent to the server
+const PRODUCT_FIELDS = {   // header text (lower case, letters only) -> field sent to the server
   name: 'name', product: 'name', productname: 'name', title: 'name', producttitle: 'name',
   image: 'image', imageurl: 'image', imagelink: 'image', photo: 'image', photolink: 'image', photourl: 'image', img: 'image', picture: 'image',
   url: 'url', link: 'url', productlink: 'url', producturl: 'url', storelink: 'url', buylink: 'url', storeurl: 'url',
@@ -202,10 +202,11 @@ function bulkTypes() {
 $('b-cat').addEventListener('change', bulkSubs);
 $('b-sub').addEventListener('change', bulkTypes);
 
-function parseSheet(rows) {
+function parseSheet(rows, FIELD_OF = PRODUCT_FIELDS, skip = x => isExample(x.name)) {
   const norm = h => String(h || '').toLowerCase().replace(/[^a-z]/g, '');
-  const headerRow = rows.slice(0, 10).findIndex(r => r.some(h => FIELD_OF[norm(h)] === 'name') && r.some(h => FIELD_OF[norm(h)] === 'url'));
-  if (headerRow < 0) throw new Error('Could not find the header row. The first row needs at least "Name" and "URL" columns. Download the template to see the layout.');
+  const key = FIELD_OF === PRODUCT_FIELDS ? 'name' : 'title';
+  const headerRow = rows.slice(0, 10).findIndex(r => r.some(h => FIELD_OF[norm(h)] === key) && r.some(h => FIELD_OF[norm(h)] === 'url'));
+  if (headerRow < 0) throw new Error(`Could not find the header row. The first row needs at least "${key === 'name' ? 'Name' : 'Title'}" and "URL" columns. Download the template to see the layout.`);
   const header = rows[headerRow];
   const fields = header.map(h => FIELD_OF[norm(h)] || null);
   const items = [];
@@ -213,7 +214,7 @@ function parseSheet(rows) {
     if (!r.some(v => String(v).trim())) return;
     const item = { row: headerRow + i + 2 };
     fields.forEach((f, ci) => { if (f && !item[f]) item[f] = String(r[ci] ?? '').trim(); });
-    if (!isExample(item.name)) items.push(item);
+    if (!skip(item)) items.push(item);
   });
   return { header, headerRow, rows, items };
 }
@@ -274,7 +275,7 @@ $('bulkForm').addEventListener('submit', async e => {
 $('bulkLinks').addEventListener('click', async () => {
   if (!sheet) return;
   const st = $('bulkStatus'), btn = $('bulkLinks');
-  const urlCol = sheet.header.findIndex(h => FIELD_OF[String(h || '').toLowerCase().replace(/[^a-z]/g, '')] === 'url');
+  const urlCol = sheet.header.findIndex(h => PRODUCT_FIELDS[String(h || '').toLowerCase().replace(/[^a-z]/g, '')] === 'url');
   const body = sheet.rows.slice(sheet.headerRow + 1);
   const urls = [...new Set(body.map(r => String(r[urlCol] ?? '').trim()).filter(u => /^https?:\/\//.test(u)))];
   const done = new Map();
@@ -296,6 +297,71 @@ $('bulkLinks').addEventListener('click', async () => {
     st.textContent = `Made ${made} of ${urls.length} affiliate link${urls.length === 1 ? '' : 's'}. The file is in your downloads.` + (made < urls.length ? ' The Note column says why the others were not made.' : '');
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
   finally { btn.disabled = false; }
+});
+
+
+/* Upload deals from Excel */
+const DEAL_COLUMNS = ['Title', 'Store', 'Coupon code', 'URL', 'Details', 'Image', 'Ends on'];
+const DEAL_WIDTHS = [40, 14, 16, 50, 40, 40, 12];
+const DEAL_FIELDS = {
+  title: 'title', deal: 'title', dealtitle: 'title', name: 'title', offer: 'title',
+  store: 'store', site: 'store', shop: 'store',
+  code: 'code', coupon: 'code', couponcode: 'code', promocode: 'code', promo: 'code',
+  url: 'url', link: 'url', deallink: 'url', dealurl: 'url', storelink: 'url',
+  details: 'description', description: 'description', terms: 'description',
+  image: 'image', imageurl: 'image', photo: 'image', photolink: 'image', img: 'image',
+  endson: 'endsAt', ends: 'endsAt', enddate: 'endsAt', expiry: 'endsAt', expires: 'endsAt', expirydate: 'endsAt', validtill: 'endsAt', validuntil: 'endsAt',
+};
+let dealSheet = null;
+
+$('dlDealTemplate').addEventListener('click', () => download(Sheet.writeXlsx([DEAL_COLUMNS,
+  ['Example: Flat 40% off on running shoes (rows starting with Example are skipped)', 'Myntra', 'RUN40', 'https://www.myntra.com/…', 'Min. order ₹999', '', '2026-12-31'],
+], 'Deals', DEAL_WIDTHS), 'comparezo-deals-template.xlsx'));
+
+$('dlDeals').addEventListener('click', async () => {
+  try {
+    const list = await call('GET', '/api/admin/my-deals');
+    download(Sheet.writeXlsx([DEAL_COLUMNS, ...list.map(d => [d.title, d.store || '', d.code || '', d.url, d.description || '', d.image || '', d.ends_at || ''])], 'Deals', DEAL_WIDTHS), `comparezo-deals-${stamp()}.xlsx`);
+  } catch (err) { toast(err.message); }
+});
+
+$('dealFile').addEventListener('change', async e => {
+  const file = e.target.files[0], st = $('dealBulkStatus');
+  dealSheet = null; $('dealPreview').hidden = $('dealProblems').hidden = true; $('dealBulkAdd').disabled = true;
+  st.className = ''; st.textContent = '';
+  if (!file) return;
+  try {
+    dealSheet = { fileName: file.name, ...parseSheet(await Sheet.readSheet(file), DEAL_FIELDS, x => isExample(x.title)) };
+    const items = dealSheet.items;
+    if (!items.length) throw new Error('The sheet has a header row but no deals under it.');
+    if (items.length > 500) throw new Error(`Upload at most 500 deals at a time. This sheet has ${items.length}; split it into smaller sheets.`);
+    const missing = items.filter(x => !x.title || !x.url).length;
+    $('dealPreview').hidden = false;
+    $('dealPreview').innerHTML = `<p class="sub"><strong>${esc(file.name)}</strong>: ${items.length} deal${items.length === 1 ? '' : 's'}.`
+      + (missing ? ` ${missing} ${missing === 1 ? 'is' : 'are'} missing a title or URL and will be skipped.` : '') + '</p>'
+      + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th>Title</th><th>Store</th><th>Code</th><th>Ends</th><th>Link</th></tr></thead><tbody>`
+      + items.slice(0, 8).map(x => `<tr><td>${x.row}</td><td>${esc(x.title || '—')}</td><td>${esc(x.store || '')}</td><td>${esc(x.code || '')}</td><td>${esc(x.endsAt || '')}</td><td><span class="sub">${esc((x.url || '—').slice(0, 60))}</span></td></tr>`).join('')
+      + `</tbody></table></div>${items.length > 8 ? `<p class="sub">…and ${items.length - 8} more.</p>` : ''}`;
+    $('dealBulkAdd').disabled = false;
+  } catch (err) { dealSheet = null; st.className = 'err'; st.textContent = err.message; }
+});
+
+$('dealBulkForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!dealSheet) return;
+  const st = $('dealBulkStatus');
+  st.className = ''; st.textContent = 'Adding…'; $('dealBulkAdd').disabled = true;
+  try {
+    const r = await call('POST', '/api/admin/my-deals/bulk', { rows: dealSheet.items });
+    st.className = r.added ? 'ok' : 'err';
+    st.textContent = (r.added ? `Added ${r.added} deal${r.added === 1 ? '' : 's'}` : 'No new deals were added')
+      + (r.skipped ? `, skipped ${r.skipped} already saved` : '') + '.'
+      + (r.problems.length ? ` ${r.problems.length} row${r.problems.length === 1 ? ' needs' : 's need'} fixing, see below.` : '');
+    $('dealProblems').hidden = !r.problems.length;
+    $('dealProblems').innerHTML = r.problems.length ? `<span class="label">Rows not added</span><ul class="bulk-problems">${r.problems.slice(0, 100).map(p => `<li>Row ${p.row}${p.name ? ` (${esc(p.name)})` : ''}: ${esc(p.error)}</li>`).join('')}</ul>` : '';
+    if (r.added) loadMyDeals();
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+  finally { $('dealBulkAdd').disabled = false; }
 });
 
 /* Unlock */

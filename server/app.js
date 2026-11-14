@@ -11,7 +11,7 @@ const { addProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
-const { importRows } = require('./bulk');
+const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
@@ -216,19 +216,39 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(d.url));
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
+  const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
   app.post('/api/admin/my-deals', requireAdmin, (req, res) => {
-    const b = req.body || {};
-    const str = (v, n) => String(v ?? '').trim().slice(0, n);
-    const title = str(b.title, 160), url = str(b.url, 2000), image = str(b.image, 2000), endsAt = str(b.endsAt, 10);
-    const errors = [];
-    if (!title) errors.push('Give the deal a title.');
-    if (!/^https:\/\/\S+$/.test(url)) errors.push('Paste the deal link, starting with https://.');
-    if (image && !/^https:\/\/\S+$/.test(image)) errors.push('The photo link must start with https://.');
-    if (endsAt && !/^\d{4}-\d{2}-\d{2}$/.test(endsAt)) errors.push('Pick the end date from the calendar.');
-    if (errors.length) return res.status(400).json({ errors });
-    const r = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(title, str(b.store, 60), str(b.code, 40) || null, url, str(b.description, 300), image || null, endsAt || null);
-    res.status(201).json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(Number(r.lastInsertRowid)));
+    const r = checkDeal(req.body);
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    const d = r.deal;
+    const id = Number(insertDeal.run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt).lastInsertRowid);
+    res.status(201).json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id));
+  });
+  // Many deals at once, from the spreadsheet the owner uploads. A deal with the same link and
+  // coupon code as one already saved is skipped, so the same sheet can be uploaded twice.
+  app.post('/api/admin/my-deals/bulk', requireAdmin, (req, res) => {
+    const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ error: 'The sheet has no deal rows.' });
+    if (rows.length > 500) return res.status(400).json({ error: `Upload at most 500 deals at a time. This sheet has ${rows.length}.` });
+    const have = new Set(myDealRows().map(d => `${d.url}|${d.code || ''}`));
+    let added = 0, skipped = 0;
+    const problems = [];
+    db.exec('BEGIN');
+    try {
+      rows.forEach((row, i) => {
+        const url = httpsLink(row.url), image = httpsLink(row.image);
+        const r = checkDeal({ ...row, url, image, store: row.store || storeFromUrl(url) });
+        const rowNo = Number(row.row) || i + 2;
+        if (r.errors) return problems.push({ row: rowNo, name: String(row.title || '').slice(0, 80), error: r.errors.join(' ') });
+        const d = r.deal, k = `${d.url}|${d.code || ''}`;
+        if (have.has(k)) { skipped++; return; }
+        have.add(k);
+        insertDeal.run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt);
+        added++;
+      });
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    res.json({ added, skipped, problems });
   });
   app.delete('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
     const r = db.prepare('DELETE FROM my_deals WHERE id = ?').run(Number(req.params.id));

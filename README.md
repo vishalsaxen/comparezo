@@ -101,6 +101,8 @@ Under **Upload products from Excel** on `/products.html`, upload an `.xlsx` or `
 
 **Download with affiliate links** returns the same sheet with an "Affiliate link" column: each URL goes to EarnKaro first, then to Admitad's deeplink API for stores your Admitad website has joined (`POST /api/admin/affiliate-links`). The Admitad part signs in with the scopes `advcampaigns_for_website deeplink_generator`, which must be allowed for your Admitad API app. Neither EarnKaro nor Admitad provides product names, photos or prices, so those come from your sheet. ExtraPe has no API and its Chrome extension can't run inside a website; paste ExtraPe links in the URL column and fill in Store.
 
+**Deals from Excel.** Under **Upload deals from Excel** (below Add deal), upload a sheet with Title and URL, plus Store, Coupon code, Details, Image and Ends on. Dates can be `2026-12-31`, `31/12/2026` or an Excel date cell. A deal with the same link and code as a saved one is skipped (`POST /api/admin/my-deals/bulk`). **Download my deals as Excel** saves them in the same layout.
+
 **Download all products as Excel** saves every product in the same layout, so it doubles as a backup you can upload again.
 
 ## Earning commission with Cuelinks
