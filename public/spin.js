@@ -63,7 +63,7 @@
       // Text runs along the segment's centre line, reading outwards, like the labels on a prize wheel.
       return `${path}<g transform="translate(${C} ${C}) rotate(${mid}) translate(86 0)"><text fill="${fg}" font-size="11.5" font-weight="700" text-anchor="middle" transform="translate(0 ${(-(total - 1) * 14) / 2 + 4})">${storeLine}${tl}</text></g>`;
     }).join('');
-    return `<svg class="spin-wheel" viewBox="0 0 320 320" aria-hidden="true"><circle cx="${C}" cy="${C}" r="${R + 8}" fill="#fff"/>${parts}<circle cx="${C}" cy="${C}" r="20" fill="#fff"/><circle cx="${C}" cy="${C}" r="13" fill="#14201d"/></svg>`;
+    return `<svg class="spin-wheel" viewBox="0 0 320 320" aria-hidden="true"><circle cx="${C}" cy="${C}" r="${R + 8}" fill="#fff"/>${parts}<circle cx="${C}" cy="${C}" r="44" fill="#fff" stroke="#14201d" stroke-opacity=".12" stroke-width="2"/></svg>`;
   }
 
   function build() {
@@ -75,6 +75,7 @@
         <div class="spin-wheel-box">
           <div class="spin-rotor">${wheelSvg(wheelDeals)}</div>
           <div class="spin-pointer" aria-hidden="true"></div>
+          <div class="spin-hub" aria-hidden="true"><span class="wm"><span class="wm-c">Compare</span><span class="wm-st"><span class="wm-z">zo</span><span class="wm-e">E</span></span></span></div>
         </div>
         <div class="spin-side">
           <h2 id="spinTitle">Spin to win! <span aria-hidden="true">🎉</span></h2>
