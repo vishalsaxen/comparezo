@@ -67,7 +67,11 @@ function route() {
   }
   document.title = tab === 'compare' ? 'Comparezo' : `${TABS[tab]} · Comparezo`;
   if (tab === 'linezo' && !linezoLoaded) { linezoLoaded = true; loadTrends(); }
+  if (tab === 'deals' && dealsLoaded) offerSpin();
 }
+// Spin to win pops up the first time Super Saver Deals is opened in a session (see spin.js).
+let dealsLoaded = null;
+const offerSpin = () => { if (window.czSpin && dealsLoaded) window.czSpin.offer(dealsLoaded).catch(() => {}); };
 window.addEventListener('hashchange', route);
 // Log out: forget the admin key in this browser, hide Linezo and go back to Comparezo.
 // To log in again, enter the key on the Add products page.
@@ -207,6 +211,8 @@ async function loadDeals() {
   }).join('');
   $('dealCount').textContent = data.deals.length.toLocaleString('en-IN');
   $('dealEmpty').hidden = data.deals.length > 0;
+  dealsLoaded = data.deals;
+  if (location.hash === '#deals') offerSpin();
 }
 /* ---------- Linezo: trends ---------- */
 const lz = { days: 30, category: '' };

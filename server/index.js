@@ -10,6 +10,7 @@ const { createAffAlliances } = require('./affalliances');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
+const { phoneAuthFromEnv, webConfigFromEnv } = require('./spin');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -70,6 +71,8 @@ async function main() {
     partnerize: createPartnerize({ appKey: (process.env.PARTNERIZE_APP_KEY || '').trim(), apiKey: (process.env.PARTNERIZE_API_KEY || '').trim(), publisherId: (process.env.PARTNERIZE_PUBLISHER_ID || '').trim() }),
     affalliances: createAffAlliances({ links: process.env.AFFALLIANCES_LINKS || '' }),
     deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
+    phoneAuth: phoneAuthFromEnv(process.env),
+    firebaseWebConfig: webConfigFromEnv(process.env),
     onChange: store ? () => store.later() : null,
     // Extra front-end addresses allowed to call the API, comma separated (e.g. a custom domain).
     corsOrigins: [...DEFAULT_ORIGINS, ...(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)],

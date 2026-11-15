@@ -16,6 +16,7 @@ const { createAffAlliances } = require('./affalliances');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
+const { createPhoneAuth, createSpins } = require('./spin');
 
 
 // Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
@@ -24,7 +25,7 @@ const isAdmitadLink = u => { try { return /(^|\.)admitad\.com$/.test(new URL(u).
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), storeSearch = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -32,7 +33,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.use((req, res, next) => {
     const origin = req.get('origin');
     if (origin && allowed.has(origin)) {
-      res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+      res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE', 'Access-Control-Max-Age': '600' });
       if (req.method === 'OPTIONS') return res.sendStatus(204);
     }
@@ -234,11 +235,35 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
     image: d.image || null, url: viaGo ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
   // Order: the owner's own deals, then Admitad, then Cuelinks.
-  app.get('/api/deals', async (_req, res) => {
+  async function allDeals() {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    res.json({ connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals] });
+    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals] };
+  }
+  app.get('/api/deals', async (_req, res) => res.json(await allDeals()));
+
+  // Spin to win (see spin.js). The page asks /api/spin/config whether it is switched on, the shopper
+  // verifies their number with a Firebase phone OTP, and POST /api/spin checks the Firebase ID token,
+  // saves the number and picks which of the wheel's deals they win.
+  const spins = createSpins(db);
+  app.get('/api/spin/config', (_req, res) => res.json({ enabled: !!phoneAuth.connected, firebase: firebaseWebConfig }));
+  app.post('/api/spin', async (req, res) => {
+    if (!phoneAuth.connected) return res.status(503).json({ error: 'Spin to win is not switched on yet.' });
+    const token = (String(req.get('authorization') || '').match(/^Bearer\s+(\S+)$/) || [])[1];
+    if (!token) return res.status(401).json({ error: 'Please verify your mobile number first.' });
+    let who;
+    try { who = await phoneAuth.verify(token); } catch { return res.status(401).json({ error: 'Your verification expired. Please verify your number again.' }); }
+    if (!who.phone) return res.status(401).json({ error: 'Please verify your mobile number first.' });
+    if (req.body?.consent !== true) return res.status(400).json({ error: 'Please agree to the consent line to play.' });
+    const ids = Array.isArray(req.body?.deals) ? [...new Set(req.body.deals.map(String))].slice(0, 4) : [];
+    const { deals: live } = await allDeals();
+    const onWheel = ids.map(id => live.find(d => d.id === id)).filter(Boolean);
+    if (!onWheel.length) return res.status(400).json({ error: 'These deals have changed. Close the wheel and open Super Saver Deals again.' });
+    const r = spins.spin({ phone: who.phone, uid: who.uid, deals: onWheel });
+    const deal = live.find(d => d.id === r.dealId) || null;
+    res.json({ already: r.already, index: ids.indexOf(r.dealId), deal });
   });
+  app.get('/api/admin/spin-players', requireAdmin, (_req, res) => res.json(spins.list()));
   app.get('/api/admin/admitad/check', requireAdmin, async (_req, res) => res.json(await admitad.check()));
   app.get('/api/go/deal/:id', async (req, res) => {
     const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
