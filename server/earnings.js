@@ -10,6 +10,8 @@
 //             Keys are off on Render until the new account is approved.
 //   EarnKaro  no: its API only converts links. Type the numbers from the EarnKaro app.
 //   ExtraPe   no API at all. Type the numbers in.
+//   Aff Alliances no: no public publisher API (checked 2026-11-15). Type the numbers from the
+//             Aff Alliances dashboard; switch to auto if the account manager gives API access.
 //   Partnerize yes: conversion report API, see partnerize.js (PARTNERIZE_* keys). Unverified with real keys.
 //
 // Amounts: pending = waiting for the store to confirm, confirmed = approved but not paid out yet,
@@ -20,6 +22,7 @@ const NETWORKS = [
   { id: 'admitad', name: 'Admitad', dashboard: 'https://store.admitad.com/', how: 'Read from the Admitad statistics API.' },
   { id: 'cuelinks', name: 'Cuelinks', dashboard: 'https://www.cuelinks.com/dashboard', how: 'Read from the Cuelinks earnings report API.' },
   { id: 'extrape', name: 'ExtraPe', dashboard: 'https://www.extrape.com/my-earnings', how: 'ExtraPe has no API, so copy the numbers from My Earnings and type them in.' },
+  { id: 'affalliances', name: 'Aff Alliances', dashboard: 'https://affalliances.com/account', how: 'Aff Alliances has no public earnings API, so type the numbers from your Aff Alliances dashboard or the report your account manager sends.' },
   { id: 'partnerize', name: 'Partnerize', dashboard: 'https://console.partnerize.com/payments/payments', how: 'Read from the Partnerize conversion report API.' },
 ];
 const IDS = new Set(NETWORKS.map(n => n.id));

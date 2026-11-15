@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals, earnkaro, admitad } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -436,4 +436,28 @@ test('Admitad deals: signs in once, reads coupons for the website, maps and cach
     assert.ok(!JSON.stringify(pub).includes('sec'));
     assert.equal((await fetch(`${base}/api/admin/admitad/check`)).status, 401);
   }, { adminKey: 'k', admitad });
+});
+
+const { createAffAlliances, parseLinks } = require('../server/affalliances');
+test('Aff Alliances: tracking links from AFFALLIANCES_LINKS are used on Buy after EarnKaro, matched by store domain', async () => {
+  assert.deepEqual(parseLinks('bad; www.Amazonin.com=https://t.example/c?o=1&url={url}\nfoo=http://insecure').map(e => e.domain), ['amazonin.com']);
+  const aa = createAffAlliances({ links: 'amazonin.com=https://t.example/c?o=1&url={url};meesho.com=https://t.example/c?o=2' });
+  assert.equal(aa.convert('https://shop.lenovo.com/x'), null);
+  assert.equal(aa.convert('https://www.meesho.com/p/1'), 'https://t.example/c?o=2');
+  assert.equal(aa.convert('https://www.amazonin.com/dp/1?a=b'), 'https://t.example/c?o=1&url=' + encodeURIComponent('https://www.amazonin.com/dp/1?a=b'));
+
+  await withServer(async base => {
+    const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+    const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+    const amazon = detail.offers.find(o => o.store === 'Amazon.in');
+    assert.equal(amazon.buyUrl, `/api/go/${amazon.id}`);
+    const r = await fetch(`${base}/api/go/${amazon.id}`, { redirect: 'manual' });
+    assert.match(r.headers.get('location'), /^https:\/\/t\.example\/c\?o=1&url=https%3A%2F%2Fwww\.amazonin\.com/);
+    const other = detail.offers.find(o => !/amazonin|meesho/.test(o.buyUrl === `/api/go/${o.id}` ? '' : o.buyUrl) && o.store !== 'Amazon.in' && o.store !== 'Meesho');
+    if (other) assert.doesNotMatch((await fetch(`${base}/api/go/${other.id}`, { redirect: 'manual' })).headers.get('location'), /t\.example/);
+    const e = await (await fetch(`${base}/api/admin/earnings`, { headers: { 'X-Admin-Key': 'k' } })).json();
+    const row = e.networks.find(n => n.id === 'affalliances');
+    assert.equal(row.connected, true);
+    assert.equal(row.auto, false);
+  }, { adminKey: 'k', affalliances: aa });
 });

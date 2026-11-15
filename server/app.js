@@ -12,6 +12,7 @@ const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
+const { createAffAlliances } = require('./affalliances');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
@@ -23,7 +24,7 @@ const isAdmitadLink = u => { try { return /(^|\.)admitad\.com$/.test(new URL(u).
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), storeSearch = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), storeSearch = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -37,6 +38,15 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     }
     next();
   });
+  // A store link -> the link that earns commission: Admitad links as they are, then EarnKaro,
+  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, else the plain link.
+  const viaGo = earnkaro.connected || affalliances.connected;
+  async function commissionLink(url) {
+    if (isAdmitadLink(url)) return url;
+    const ek = await earnkaro.convert(url);
+    if (ek && ek !== url) return ek;
+    return affalliances.convert(url) || url;
+  }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
   app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
   // Tell the caller after every request that changed data, so it can be saved (see firestore-sync.js).
@@ -120,18 +130,18 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     if (!p) return res.status(404).json({ error: 'Product not found' });
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
-    // With EarnKaro on, Buy goes through /api/go/<offer>, which swaps in the commission link.
-    comparison.offers.forEach(o => { const u = buyUrl(o, p.name); o.buyUrl = u && earnkaro.connected ? `/api/go/${o.id}` : u; });
+    // With EarnKaro or Aff Alliances on, Buy goes through /api/go/<offer>, which swaps in the commission link.
+    comparison.offers.forEach(o => { const u = buyUrl(o, p.name); o.buyUrl = u && viaGo ? `/api/go/${o.id}` : u; });
     res.json({ product: p, ...comparison, includeExtras });
   });
 
-  // Sends a shopper to the store through their EarnKaro commission link (or the plain link).
+  // Sends a shopper to the store through a commission link (EarnKaro, Aff Alliances) or the plain link.
   app.get('/api/go/:offerId', async (req, res) => {
     const o = db.prepare('SELECT o.*, p.name AS product_name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.id = ?').get(Number(req.params.offerId));
     const url = o && buyUrl(o, o.product_name);
     if (!url) return res.status(404).type('text/plain').send('This store link is no longer available.');
     // Links that came from an Admitad feed already earn commission, so they are not sent to EarnKaro.
-    res.set('Cache-Control', 'no-store').redirect(302, isAdmitadLink(url) ? url : await earnkaro.convert(url));
+    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(url));
   });
 
   // Record a Buy click (the shopper is sent to the store). This is what Linezo tracks.
@@ -177,16 +187,18 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
         const link = await earnkaro.convert(url);
         if (link && link !== url) return { url, link, via: 'EarnKaro' };
       }
+      const aa = affalliances.convert(url);
+      if (aa) return { url, link: aa, via: 'Aff Alliances' };
       if (admitad.connected && admitad.deeplink) {
         const r = await admitad.deeplink(url);
         if (r.link) return { url, link: r.link, via: 'Admitad' };
         return { url, link: null, via: null, note: (earnkaro.connected ? 'EarnKaro could not convert it. ' : '') + `Admitad: ${r.error}` };
       }
-      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY or the ADMITAD_* keys on the server.' };
+      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY, AFFALLIANCES_LINKS or the ADMITAD_* keys on the server.' };
     };
     const results = [];
     for (let i = 0; i < urls.length; i += 5) results.push(...await Promise.all(urls.slice(i, i + 5).map(one)));
-    res.json({ earnkaro: earnkaro.connected, admitad: !!admitad.connected, results });
+    res.json({ earnkaro: earnkaro.connected, affalliances: affalliances.connected, admitad: !!admitad.connected, results });
   });
   // "Find in stores": search every connected store's official API or product feed by name.
   if (!storeSearch) {
@@ -216,11 +228,11 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
   // Deals and coupons: the owner's own (added on /products.html), Admitad (ADMITAD_* keys) and Cuelinks (CUELINKS_API_KEY).
-  // Expired own deals are hidden. With EarnKaro on, their links go through /api/go/deal/<id>.
+  // Expired own deals are hidden. With EarnKaro or Aff Alliances on, their links go through /api/go/deal/<id>.
   const today = () => new Date().toISOString().slice(0, 10);
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
-    image: d.image || null, url: earnkaro.connected ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
+    image: d.image || null, url: viaGo ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
   // Order: the owner's own deals, then Admitad, then Cuelinks.
   app.get('/api/deals', async (_req, res) => {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
@@ -231,7 +243,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.get('/api/go/deal/:id', async (req, res) => {
     const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
     if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(d.url));
+    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(d.url));
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
   const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -277,7 +289,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
 
   // Earnings page: money earned per affiliate network (see earnings.js). Owner only.
-  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected } });
+  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected, affalliances: !!affalliances.connected } });
   app.get('/api/admin/earnings', requireAdmin, async (req, res) => res.json(await earnings.report({ refresh: req.query.refresh === '1' })));
   app.post('/api/admin/earnings', requireAdmin, (req, res) => {
     const r = earnings.save(req.body);
