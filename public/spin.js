@@ -307,7 +307,9 @@
   // Called by app.js when Super Saver Deals is shown and the deals have loaded.
   async function offer(deals) {
     if (el || spun) return;
-    if (store('sessionStorage', SEEN_KEY) || store('localStorage', DAY_KEY) === indiaDay()) return;
+    // ?spin in the address (e.g. /?spin#deals) always shows the wheel, so the owner can test it again.
+    const force = /[?&]spin\b/.test(location.search);
+    if (!force && (store('sessionStorage', SEEN_KEY) || store('localStorage', DAY_KEY) === indiaDay())) return;
     if (/[?&]nospin\b/.test(location.search)) return;
     wheelDeals = pickFour(deals || []);
     if (wheelDeals.length < 2) return;
