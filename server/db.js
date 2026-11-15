@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS earnings_manual (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (network, month)
 );
+-- Shoppers who verified their mobile number (Firebase phone OTP) to play Spin to win on Super Saver Deals.
+CREATE TABLE IF NOT EXISTS spin_players (
+  phone TEXT PRIMARY KEY,         -- +91XXXXXXXXXX, as verified by Firebase
+  uid TEXT NOT NULL,              -- Firebase Auth user id
+  consent_at TEXT NOT NULL,       -- when they agreed to the consent line
+  first_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_day TEXT NOT NULL,         -- YYYY-MM-DD (India time) of the last spin, one spin a day
+  spins INTEGER NOT NULL DEFAULT 1,
+  last_deal_id TEXT,
+  last_deal_title TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;

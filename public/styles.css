@@ -375,3 +375,48 @@ html.gated, html.gated body{overflow:hidden}
 .src-box{display:flex; flex-direction:column; gap:8px; width:100%; color:var(--muted)}
 .src-box strong{color:var(--ink)}
 .src-list li{margin-top:2px}
+
+/* Spin to win popup on Super Saver Deals (spin.js) */
+html.spin-open{overflow:hidden}
+.spin-backdrop{position:fixed; inset:0; z-index:30; background:rgba(10,20,18,.55); display:flex; align-items:center; justify-content:center; padding:16px}
+.spin-card{--spin-bg:#fde9c4; --spin-ink:#14201d; position:relative; width:min(940px, 100%); max-height:calc(100dvh - 32px); overflow:auto; background:var(--spin-bg); color:var(--spin-ink); border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.35); display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:24px; padding:40px 40px 32px}
+@media (prefers-color-scheme: dark){ .spin-card{--spin-bg:#1d2b27; --spin-ink:#e6eeeb} }
+.spin-close{position:absolute; top:12px; right:12px; width:40px; height:40px; border-radius:50%; border:0; background:rgba(0,0,0,.1); color:inherit; font-size:24px; line-height:1; cursor:pointer; z-index:2}
+.spin-close:hover{background:rgba(0,0,0,.18)}
+.spin-wheel-box{position:relative; width:100%; max-width:400px; aspect-ratio:1; justify-self:center}
+.spin-rotor{width:100%; height:100%; will-change:transform}
+.spin-wheel{width:100%; height:100%; display:block; filter:drop-shadow(0 10px 22px rgba(0,0,0,.25)); font-family:var(--f-body)}
+.spin-pointer{position:absolute; right:-6px; top:50%; width:0; height:0; transform:translateY(-50%); border-top:15px solid transparent; border-bottom:15px solid transparent; border-right:30px solid #c0392b; filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
+.spin-side h2{font-size:clamp(26px, 4vw, 36px); font-weight:800; letter-spacing:-.01em}
+.spin-lede{margin:8px 0 20px; font-size:16px}
+.spin-step{display:flex; flex-direction:column; gap:12px}
+.spin-phone{display:flex; align-items:stretch; background:#fff; border:1px solid rgba(0,0,0,.15); border-radius:8px; overflow:hidden; color:#14201d}
+.spin-cc{display:flex; align-items:center; padding:0 14px; border-right:1px solid rgba(0,0,0,.12); font-weight:600; white-space:nowrap; font-size:15px}
+.spin-phone input,.spin-code{flex:1; min-width:0; border:0; padding:14px; font-size:18px; background:#fff; color:#14201d; letter-spacing:.04em; outline:none}
+.spin-code{border:1px solid rgba(0,0,0,.15); border-radius:8px; letter-spacing:.3em; font-family:var(--f-num)}
+.spin-phone:focus-within,.spin-code:focus{outline:2px solid var(--marigold); outline-offset:1px}
+.spin-consent{display:flex; gap:10px; align-items:flex-start; font-size:13px; line-height:1.45; opacity:.9; cursor:pointer}
+.spin-consent input{margin-top:2px; width:18px; height:18px; flex:none; accent-color:#0f5a4f}
+.spin-consent a{color:inherit}
+.spin-go{background:#c0392b; color:#fff; border-radius:999px; padding:15px 20px; font-size:16px; letter-spacing:.06em; text-transform:uppercase}
+.spin-go:hover{background:#a93226}
+.spin-link{background:none; border:0; padding:0; color:inherit; text-decoration:underline; cursor:pointer; font-weight:600; font-size:inherit}
+.spin-sent{margin:0; font-size:14px}
+.spin-msg{min-height:1.4em; margin:12px 0 0; font-weight:600; color:#b02a1c; font-size:14px}
+@media (prefers-color-scheme: dark){ .spin-msg{color:#ff8a7a} }
+.spin-skip{font-size:13px; opacity:.8; margin-top:4px}
+.spin-won{font-family:var(--f-display); font-size:22px; font-weight:800; margin:0}
+.spin-prize{background:var(--surface); color:var(--ink); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:6px; box-shadow:var(--shadow)}
+.spin-prize-t{font-weight:700}
+.spin-code-row{display:flex; align-items:center; gap:8px; font-size:13px}
+.spin-code-row .chip{font-family:var(--f-num); color:var(--ink); cursor:default}
+.spin-actions{display:flex; gap:10px; flex-wrap:wrap}
+.spin-actions .btn-ghost{border-color:currentColor; color:inherit; border-radius:999px}
+@media (max-width:720px){
+  .spin-backdrop{padding:0; align-items:flex-end}
+  .spin-card{grid-template-columns:1fr; gap:12px; padding:52px 16px calc(20px + env(safe-area-inset-bottom,0px)); border-radius:18px 18px 0 0; max-height:100dvh}
+  .spin-wheel-box{max-width:min(240px, 62vw)}
+  .spin-pointer{border-top-width:12px; border-bottom-width:12px; border-right-width:24px}
+  .spin-side{text-align:left}
+  .spin-lede{margin-bottom:14px; font-size:15px}
+}
