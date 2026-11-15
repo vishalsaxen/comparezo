@@ -6,6 +6,7 @@ const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
+const { createAffAlliances } = require('./affalliances');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
@@ -58,6 +59,7 @@ async function main() {
   console.log(process.env.ADMITAD_CLIENT_ID && process.env.ADMITAD_CLIENT_SECRET && process.env.ADMITAD_WEBSITE_ID ? 'Admitad deals: connected.' : 'Admitad deals: set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to show deals.');
   console.log(process.env.PARTNERIZE_APP_KEY && process.env.PARTNERIZE_API_KEY && process.env.PARTNERIZE_PUBLISHER_ID ? 'Partnerize earnings: connected.' : 'Partnerize earnings: set PARTNERIZE_APP_KEY, PARTNERIZE_API_KEY and PARTNERIZE_PUBLISHER_ID to read them.');
   console.log(process.env.EARNKARO_API_KEY ? 'EarnKaro: Buy links earn commission.' : 'EarnKaro: set EARNKARO_API_KEY to turn Buy links into commission links.');
+  console.log(process.env.AFFALLIANCES_LINKS ? 'Aff Alliances: tracking links set.' : 'Aff Alliances: set AFFALLIANCES_LINKS to your tracking links (store domain=link) to use them on Buy.');
   createApp(db, {
     uploadsDir: path.join(DATA_DIR, 'uploads'),
     adminKey: process.env.ADMIN_KEY || '',
@@ -66,6 +68,7 @@ async function main() {
     earnkaro: createEarnKaro({ apiKey: (process.env.EARNKARO_API_KEY || '').trim() }),
     admitad: createAdmitad({ clientId: (process.env.ADMITAD_CLIENT_ID || '').trim(), clientSecret: (process.env.ADMITAD_CLIENT_SECRET || '').trim(), websiteId: (process.env.ADMITAD_WEBSITE_ID || '').trim() }),
     partnerize: createPartnerize({ appKey: (process.env.PARTNERIZE_APP_KEY || '').trim(), apiKey: (process.env.PARTNERIZE_API_KEY || '').trim(), publisherId: (process.env.PARTNERIZE_PUBLISHER_ID || '').trim() }),
+    affalliances: createAffAlliances({ links: process.env.AFFALLIANCES_LINKS || '' }),
     deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
     onChange: store ? () => store.later() : null,
     // Extra front-end addresses allowed to call the API, comma separated (e.g. a custom domain).
