@@ -186,6 +186,13 @@
       'auth/captcha-check-failed': 'The security check failed. Please try again.',
       'auth/network-request-failed': 'No internet connection. Please check it and try again.',
     };
+    // Show Firebase's own code in brackets so the owner can tell which setting is missing.
+    const setup = {
+      'auth/operation-not-allowed': 'Phone sign-in is off in Firebase',
+      'auth/billing-not-enabled': 'Firebase needs the Blaze plan to send SMS',
+      'auth/unauthorized-domain': 'this address is not in Firebase Authorized domains',
+    }[code];
+    if (setup) return `${m[code]} (${setup}: ${code})`;
     return m[code] || (e && e.message ? `Something went wrong: ${e.message}` : 'Something went wrong. Please try again.');
   }
 
