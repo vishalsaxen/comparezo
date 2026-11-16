@@ -7,7 +7,7 @@ const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
 const feeds = require('./feeds');
-const { addProduct, deleteProduct } = require('./catalog');
+const { addProduct, updateProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
@@ -212,6 +212,13 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     storeSearch = createStoreSearch(db, { sources, notConnected });
   }
   app.get('/api/admin/store-search', requireAdmin, async (req, res) => res.json(await storeSearch.search(req.query.q)));
+  // Edit a product: send only the fields to change, or all of them (see updateProduct in catalog.js).
+  app.patch('/api/admin/products/:id', requireAdmin, (req, res) => {
+    const r = updateProduct(db, Number(req.params.id), req.body || {});
+    if (r.notFound) return res.status(404).json({ error: 'Product not found.' });
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    res.json(manualProducts().find(p => p.id === r.id) || { id: r.id });
+  });
   app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
     const p = db.prepare('SELECT id FROM products WHERE id = ?').get(id);
@@ -304,6 +311,21 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
     res.json({ added, skipped, problems });
+  });
+  // Edit a deal: fields not sent keep their saved value.
+  app.patch('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    const old = db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id);
+    if (!old) return res.status(404).json({ error: 'Deal not found.' });
+    const b = req.body || {};
+    const pick = (k, saved) => (Object.prototype.hasOwnProperty.call(b, k) ? b[k] : saved);
+    const r = checkDeal({ title: pick('title', old.title), store: pick('store', old.store), code: pick('code', old.code), url: pick('url', old.url),
+      description: pick('description', old.description), image: pick('image', old.image), endsAt: pick('endsAt', old.ends_at) });
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    const d = r.deal;
+    db.prepare('UPDATE my_deals SET title = ?, store = ?, code = ?, url = ?, description = ?, image = ?, ends_at = ? WHERE id = ?')
+      .run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt, id);
+    res.json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id));
   });
   app.delete('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
     const r = db.prepare('DELETE FROM my_deals WHERE id = ?').run(Number(req.params.id));

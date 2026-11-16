@@ -6,7 +6,7 @@
 <title>Add products · Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-14e">
+<link rel="stylesheet" href="/styles.css?v=2026-11-16a">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -149,7 +149,7 @@
 
   <section id="listWrap" hidden>
     <h2>All products</h2>
-    <p class="sub">Products are saved in Firebase. Delete removes a product from the site and the database. You can also delete a product from its page on the main site while this browser has the admin key. <strong>Copy list</strong> makes a backup copy.</p>
+    <p class="sub">Products are saved in Firebase. <strong>Edit</strong> opens the product's details under it so you can change any field (name, category, photo, stores, prices, links) and save. Delete removes a product from the site and the database. You can also delete a product from its page on the main site while this browser has the admin key. <strong>Copy list</strong> makes a backup copy.</p>
     <p><button type="button" class="btn btn-ghost small" id="copyList">Copy list</button> <span id="copyStatus" role="status"></span></p>
     <div id="list" class="cat-tree"></div>
     <h2>Add deal</h2>
@@ -180,6 +180,7 @@
       <div class="field full" id="dealProblems" hidden></div>
     </form>
     <h2>My deals</h2>
+    <p class="sub"><strong>Edit</strong> changes a deal's title, store, code, link, details, photo or end date.</p>
     <div id="myDeals" class="cat-tree"></div>
     <h2>Admitad deals</h2>
     <p><button type="button" class="btn btn-ghost small" id="checkAdmitad">Check Admitad deals</button> <span id="admitadStatus" role="status"></span></p>
@@ -191,6 +192,6 @@
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/sheet.js"></script>
-<script src="/products-admin.js?v=2026-11-14e"></script>
+<script src="/products-admin.js?v=2026-11-16a"></script>
 </body>
 </html>
