@@ -424,3 +424,7 @@ html.spin-open{overflow:hidden}
   .spin-side{text-align:left}
   .spin-lede{margin-bottom:14px; font-size:15px}
 }
+
+/* Owner's Spin players page (spin-players.js) */
+.sp-filter{width:100%; max-width:360px; border:1px solid var(--line); border-radius:8px; padding:9px 12px; background:var(--surface); margin-bottom:12px}
+#rows td:not(:last-child){white-space:nowrap}
