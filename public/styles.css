@@ -428,3 +428,7 @@ html.spin-open{overflow:hidden}
 /* Edit a product or deal in place on /products.html */
 .edit-form{padding:14px 0 4px; margin-top:8px; border-top:1px solid var(--line)}
 .cat-card:has(.edit-form){grid-column:1 / -1}
+
+/* Owner's Spin players page (spin-players.js) */
+.sp-filter{width:100%; max-width:360px; border:1px solid var(--line); border-radius:8px; padding:9px 12px; background:var(--surface); margin-bottom:12px}
+#rows td:not(:last-child){white-space:nowrap}
