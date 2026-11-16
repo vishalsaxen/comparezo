@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Spin players · Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css?v=2026-11-16s">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+</head>
+<body>
+<script src="/gate.js"></script>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="/" aria-label="Comparezo home">
+      <span class="wm" aria-hidden="true"><span class="wm-c">Compare</span><span class="wm-st"><span class="wm-z">zo</span><span class="wm-e">E</span></span></span>
+    </a>
+    <nav class="tabs" aria-label="Owner pages">
+      <a href="/#compare">Comparezo</a>
+      <a href="/#deals">Super Saver Deals</a>
+      <a href="/#linezo">Linezo</a>
+      <a href="/earnings.html">Earnings</a>
+      <a href="/spin-players.html" aria-selected="true" aria-current="page">Spin players</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap cat-admin">
+  <div class="lz-head">
+    <div>
+      <div class="eyebrow">Admin</div>
+      <h1 class="lz-title">Spin players</h1>
+      <p class="lede">Shoppers who verified their mobile number to play Spin to win on Super Saver Deals. Each number can spin once a day. They agreed to be sent deals; if someone asks to be removed, delete their number in Firebase.</p>
+    </div>
+    <div class="lz-controls" id="controls" hidden>
+      <button type="button" class="btn btn-brand" id="download">Download (Excel / CSV)</button>
+      <button type="button" class="btn btn-ghost" id="refresh">Refresh</button>
+      <button type="button" class="btn btn-ghost" id="logout" title="Remove the admin key from this browser">Log out</button>
+    </div>
+  </div>
+
+  <form class="panel pad key-row" id="keyForm" hidden>
+    <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
+    <button class="btn btn-brand" type="submit">Unlock</button>
+    <span id="keyStatus" role="status"></span>
+  </form>
+
+  <div id="board" hidden>
+    <div class="kpis" id="kpis"></div>
+    <div class="panel pad">
+      <input id="filter" type="search" class="sp-filter" placeholder="Search a number or deal" aria-label="Search a number or deal">
+      <div class="tablebox"><table class="top-table"><thead><tr><th>#</th><th>Mobile number</th><th>First spin</th><th>Last spin</th><th class="r">Spins</th><th>Last deal won</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="empty" id="empty" hidden>No one has played yet.</div>
+    </div>
+  </div>
+</main>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/spin-players.js?v=2026-11-16s"></script>
+</body>
+</html>
