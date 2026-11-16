@@ -61,6 +61,56 @@ function insertOffers(db, productId, offers) {
   for (const o of offers) ins.run(productId, o.store, o.price, o.mrp, o.deliveryFee, o.url);
 }
 
+// Changes an existing product. Only the fields sent are changed, so one field can be edited on its
+// own. When offers are sent they become the product's full store list: an offer with the id of one
+// it already has is updated in place (its Buy link /api/go/<id> keeps working), one without an id
+// is added, and stores left out are removed. Returns { id }, { errors } or { notFound: true }.
+function updateProduct(db, id, b = {}) {
+  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+  if (!p) return { notFound: true };
+  const has = k => Object.prototype.hasOwnProperty.call(b, k);
+  const errors = [];
+  const name = has('name') ? String(b.name || '').trim().slice(0, 200) : p.name;
+  if (!name) errors.push('Add a product name.');
+  // A new category resets the sub-category and type unless they are sent too.
+  const catChanged = has('category') && b.category !== p.category;
+  const category = has('category') ? b.category : p.category;
+  const subCategory = has('subCategory') ? (String(b.subCategory || '').trim() || null) : (catChanged ? null : p.sub_category);
+  const type = has('type') ? (String(b.type || '').trim() || null) : (catChanged || has('subCategory') ? null : p.type);
+  const catError = cats.checkPath(db, category, subCategory, type);
+  if (catError) errors.push(catError);
+  const spec = has('spec') ? String(b.spec || '').trim().slice(0, 200) : p.spec;
+  const image = has('image') ? String(b.image || '').trim() : (p.image || '');
+  if (image && !HTTPS.test(image)) errors.push('The photo link must start with https://');
+  let offers = null;
+  if (has('offers')) {
+    const checked = cleanOffers(b.offers);
+    errors.push(...checked.errors);
+    const own = new Set(db.prepare('SELECT id FROM offers WHERE product_id = ?').all(id).map(o => o.id));
+    // cleanOffers drops the id, so put back the ids that belong to this product.
+    const raw = (Array.isArray(b.offers) ? b.offers : []).slice(0, 12).filter(o => o.store || o.url || o.price);
+    offers = checked.offers.map((o, i) => ({ ...o, id: own.has(Number(raw[i] && raw[i].id)) ? Number(raw[i].id) : null }));
+  }
+  if (errors.length) return { errors };
+
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE products SET name = ?, category = ?, sub_category = ?, type = ?, spec = ?, image = ? WHERE id = ?')
+      .run(name, category, subCategory, type, spec, image || null, id);
+    if (offers) {
+      const keep = new Set(offers.filter(o => o.id).map(o => o.id));
+      for (const o of db.prepare('SELECT id FROM offers WHERE product_id = ?').all(id)) {
+        if (!keep.has(o.id)) db.prepare('DELETE FROM offers WHERE id = ?').run(o.id);
+      }
+      const upd = db.prepare(`UPDATE offers SET store = ?, price = ?, mrp = ?, delivery_fee = ?, url = ?, updated_at = datetime('now') WHERE id = ?`);
+      for (const o of offers) if (o.id) upd.run(o.store, o.price, o.mrp, o.deliveryFee, o.url, o.id);
+      insertOffers(db, id, offers.filter(o => !o.id));
+    }
+    db.exec('COMMIT');
+    return { id };
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
 // Delete a product and its store prices. Linezo keeps the click history without the product link.
 function deleteProduct(db, id) {
   db.exec('BEGIN');
@@ -94,4 +144,4 @@ function loadCatalog(db, file = path.join(__dirname, 'catalog.json')) {
   return { added, removed, problems };
 }
 
-module.exports = { addProduct, deleteProduct, loadCatalog, cleanOffers, insertOffers };
+module.exports = { addProduct, updateProduct, deleteProduct, loadCatalog, cleanOffers, insertOffers };

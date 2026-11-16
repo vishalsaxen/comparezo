@@ -88,13 +88,109 @@ let added = [];
 async function loadList() {
   const list = added = await call('GET', '/api/admin/products');
   $('listWrap').hidden = false;
-  $('list').innerHTML = list.length ? list.map(p => `<div class="panel cat-card"><div class="cat-row">
+  $('list').innerHTML = list.length ? list.map(p => `<div class="panel cat-card" data-card="${p.id}"><div class="cat-row">
       <span class="cat-name">${esc(p.name)} <span class="sub">· ${esc([p.category, p.sub_category, p.type].filter(Boolean).join(' › '))}</span><br>
       <span class="sub">${p.offers.map(o => `${esc(o.store)} ${inr(o.price)}`).join(' · ')}</span></span>
-      <span class="cat-actions"><button type="button" class="btn btn-ghost small danger" data-del="${p.id}" data-name="${esc(p.name)}">Delete</button></span>
+      <span class="cat-actions"><button type="button" class="btn btn-ghost small" data-edit="${p.id}">Edit</button>
+        <button type="button" class="btn btn-ghost small danger" data-del="${p.id}" data-name="${esc(p.name)}">Delete</button></span>
     </div></div>`).join('') : '<p class="sub">Nothing added yet.</p>';
 }
+
+/* Edit a product in place: the form opens under it, filled with what is saved, so you can change
+   one field or all of them. Store rows keep their id, so shoppers' Buy links keep working. */
+function cascade(form) {
+  const [cat, sub, type, typeWrap] = ['cat', 'sub', 'type', 'type-wrap'].map(k => form.querySelector(`[data-e="${k}"]`));
+  const subs = () => { const c = tree.find(x => x.name === cat.value); return c ? c.subcategories : []; };
+  const types = () => { const s = subs().find(x => x.name === sub.value); return s ? s.types : []; };
+  const fillTypes = (want = '') => {
+    const t = types();
+    typeWrap.hidden = !t.length;
+    type.innerHTML = t.length ? opts(t, 'Pick a type') : '';
+    if (want) type.value = want;
+  };
+  const fillSubs = (want = '', wantType = '') => {
+    const s = subs();
+    sub.innerHTML = s.length ? opts(s, 'Pick a sub-category') : '<option value="">None</option>';
+    sub.disabled = !s.length;
+    if (want) sub.value = want;
+    fillTypes(wantType);
+  };
+  cat.addEventListener('change', () => fillSubs());
+  sub.addEventListener('change', () => fillTypes());
+  return { fillSubs };
+}
+function fillOfferRow(row, o) {
+  const sel = row.querySelector('[data-f=store]');
+  if (o.store && ![...sel.options].some(x => x.value === o.store)) sel.insertAdjacentHTML('afterbegin', `<option>${esc(o.store)}</option>`);
+  sel.value = o.store || sel.value;
+  row.querySelector('[data-f=price]').value = o.price ?? '';
+  row.querySelector('[data-f=mrp]').value = o.mrp ?? '';
+  row.querySelector('[data-f=deliveryFee]').value = o.delivery_fee || '';
+  row.querySelector('[data-f=url]').value = o.url || '';
+  row.insertAdjacentHTML('beforeend', `<input type="hidden" data-f="id" value="${o.id}">`);
+}
+function openEdit(card, p) {
+  const form = document.createElement('form');
+  form.className = 'sell-form edit-form';
+  form.noValidate = true;
+  form.innerHTML = `
+    <div class="field full"><label>Product name</label><input data-e="name" maxlength="200" value="${esc(p.name)}"></div>
+    <div class="field"><label>Category</label><select data-e="cat">${opts(tree, 'Pick a category')}</select></div>
+    <div class="field"><label>Sub-category</label><select data-e="sub"></select></div>
+    <div class="field" data-e="type-wrap" hidden><label>Type</label><select data-e="type"></select></div>
+    <div class="field full"><label>Short details</label><input data-e="spec" maxlength="200" value="${esc(p.spec || '')}"></div>
+    <div class="field full"><label>Photo link</label><input data-e="image" value="${esc(p.image || '')}" placeholder="https://…"></div>
+    <div class="field full"><span class="label">Where to buy</span><div class="offer-rows" data-e="offers"></div>
+      <button type="button" class="btn btn-ghost small" data-e="add">+ Add another store</button></div>
+    <div class="form-actions">
+      <button class="btn btn-brand" type="submit">Save changes</button>
+      <button type="button" class="btn btn-ghost" data-e="cancel">Cancel</button>
+      <span role="status" data-e="status"></span>
+    </div>`;
+  card.appendChild(form);
+  const q = k => form.querySelector(`[data-e="${k}"]`);
+  const cat = q('cat');
+  if (p.category && ![...cat.options].some(x => x.value === p.category)) cat.insertAdjacentHTML('beforeend', `<option>${esc(p.category)}</option>`);
+  cat.value = p.category || '';
+  cascade(form).fillSubs(p.sub_category || '', p.type || '');
+  const box = q('offers');
+  for (const o of p.offers) fillOfferRow(addOfferRow(box), o);
+  if (!p.offers.length) addOfferRow(box);
+  q('add').addEventListener('click', () => addOfferRow(box));
+  box.addEventListener('click', e => {
+    if (e.target.closest('[data-remove]') && box.children.length > 1) e.target.closest('.offer-row').remove();
+  });
+  q('cancel').addEventListener('click', () => closeEdit(card));
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const offers = [...box.children].map(r => Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, i.value.trim()])));
+    const body = { name: q('name').value.trim(), category: cat.value, subCategory: q('sub').value, type: q('type').value,
+      spec: q('spec').value.trim(), image: q('image').value.trim(), offers };
+    const st = q('status');
+    st.className = ''; st.textContent = 'Saving…';
+    try {
+      const saved = await call('PATCH', `/api/admin/products/${p.id}`, body);
+      toast(`Saved ${saved.name || body.name}.`);
+      loadList();
+    } catch (err) { st.className = 'err'; st.textContent = err.message; }
+  });
+  card.querySelector('[data-edit]').textContent = 'Close';
+  q('name').focus();
+}
+function closeEdit(card) {
+  const f = card.querySelector('.edit-form');
+  if (f) f.remove();
+  card.querySelector('[data-edit]').textContent = 'Edit';
+}
 $('list').addEventListener('click', async e => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) {
+    const card = ed.closest('[data-card]');
+    if (card.querySelector('.edit-form')) return closeEdit(card);
+    const p = added.find(x => String(x.id) === ed.dataset.edit);
+    if (p) openEdit(card, p);
+    return;
+  }
   const b = e.target.closest('[data-del]'); if (!b) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to delete'; return; }
   try { await call('DELETE', `/api/admin/products/${b.dataset.del}`); toast(`Deleted ${b.dataset.name}.`); loadList(); }
@@ -122,12 +218,14 @@ $('d-url').addEventListener('change', e => {
   if (hit) $('d-store').value = STORE_HOSTS[hit];
 });
 const today = () => new Date().toISOString().slice(0, 10);
+let myDeals = [];
 async function loadMyDeals() {
-  const list = await call('GET', '/api/admin/my-deals');
-  $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card"><div class="cat-row">
+  const list = myDeals = await call('GET', '/api/admin/my-deals');
+  $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card" data-deal-card="${d.id}"><div class="cat-row">
       <span class="cat-name">${esc(d.title)} <span class="sub">${d.store ? '· ' + esc(d.store) : ''}${d.code ? ' · code ' + esc(d.code) : ''}</span><br>
       <span class="sub">${d.ends_at ? (d.ends_at < today() ? 'Ended ' : 'Ends ') + esc(d.ends_at) : 'No end date'} · <a href="${esc(d.url)}" target="_blank" rel="noopener">link</a></span></span>
-      <span class="cat-actions"><button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
+      <span class="cat-actions"><button type="button" class="btn btn-ghost small" data-edit-deal="${d.id}">Edit</button>
+        <button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
     </div></div>`).join('') : '<p class="sub">No deals added yet.</p>';
 }
 $('dealForm').addEventListener('submit', async e => {
@@ -141,7 +239,49 @@ $('dealForm').addEventListener('submit', async e => {
     loadMyDeals();
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
 });
+function openDealEdit(card, d) {
+  const form = document.createElement('form');
+  form.className = 'sell-form edit-form';
+  form.noValidate = true;
+  form.innerHTML = `
+    <div class="field full"><label>Deal title</label><input data-e="title" maxlength="160" value="${esc(d.title)}"></div>
+    <div class="field"><label>Store</label><input data-e="store" maxlength="60" list="d-stores" value="${esc(d.store || '')}"></div>
+    <div class="field"><label>Coupon code</label><input data-e="code" maxlength="40" value="${esc(d.code || '')}" placeholder="Leave empty if none"></div>
+    <div class="field full"><label>Deal link</label><input data-e="url" inputmode="url" value="${esc(d.url)}"></div>
+    <div class="field full"><label>Details</label><input data-e="description" maxlength="300" value="${esc(d.description || '')}"></div>
+    <div class="field"><label>Photo link</label><input data-e="image" value="${esc(d.image || '')}" placeholder="https://…"></div>
+    <div class="field"><label>Ends on</label><input data-e="endsAt" type="date" value="${esc(d.ends_at || '')}"></div>
+    <div class="form-actions">
+      <button class="btn btn-brand" type="submit">Save changes</button>
+      <button type="button" class="btn btn-ghost" data-e="cancel">Cancel</button>
+      <span role="status" data-e="status"></span>
+    </div>`;
+  card.appendChild(form);
+  const q = k => form.querySelector(`[data-e="${k}"]`);
+  const btn = card.querySelector('[data-edit-deal]');
+  const close = () => { form.remove(); btn.textContent = 'Edit'; };
+  q('cancel').addEventListener('click', close);
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(['title', 'store', 'code', 'url', 'description', 'image', 'endsAt'].map(k => [k, q(k).value.trim()]));
+    const st = q('status');
+    st.className = ''; st.textContent = 'Saving…';
+    try { const saved = await call('PATCH', `/api/admin/my-deals/${d.id}`, body); toast(`Saved ${saved.title}.`); loadMyDeals(); }
+    catch (err) { st.className = 'err'; st.textContent = err.message; }
+  });
+  btn.textContent = 'Close';
+  q('title').focus();
+}
 $('myDeals').addEventListener('click', async e => {
+  const ed = e.target.closest('[data-edit-deal]');
+  if (ed) {
+    const card = ed.closest('[data-deal-card]');
+    const open = card.querySelector('.edit-form');
+    if (open) { open.remove(); ed.textContent = 'Edit'; return; }
+    const d = myDeals.find(x => String(x.id) === ed.dataset.editDeal);
+    if (d) openDealEdit(card, d);
+    return;
+  }
   const b = e.target.closest('[data-del-deal]'); if (!b) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to delete'; return; }
   try { await call('DELETE', `/api/admin/my-deals/${b.dataset.delDeal}`); toast(`Deleted ${b.dataset.name}.`); loadMyDeals(); }

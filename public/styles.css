@@ -424,3 +424,7 @@ html.spin-open{overflow:hidden}
   .spin-side{text-align:left}
   .spin-lede{margin-bottom:14px; font-size:15px}
 }
+
+/* Edit a product or deal in place on /products.html */
+.edit-form{padding:14px 0 4px; margin-top:8px; border-top:1px solid var(--line)}
+.cat-card:has(.edit-form){grid-column:1 / -1}

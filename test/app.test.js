@@ -461,3 +461,53 @@ test('Aff Alliances: tracking links from AFFALLIANCES_LINKS are used on Buy afte
     assert.equal(row.auto, false);
   }, { adminKey: 'k', affalliances: aa });
 });
+
+test('admin can edit one field or the whole product, keeping store ids for Buy links', () => withServer(async base => {
+  const H = { 'X-Admin-Key': 'k', 'Content-Type': 'application/json' };
+  const list = await (await fetch(`${base}/api/admin/products`, { headers: H })).json();
+  const p = list.find(x => x.name === 'Wireless earbuds');
+  const patch = body => fetch(`${base}/api/admin/products/${p.id}`, { method: 'PATCH', headers: H, body: JSON.stringify(body) });
+
+  // One field: everything else stays as saved.
+  let r = await patch({ name: 'boAt earbuds' });
+  assert.equal(r.status, 200);
+  let saved = await r.json();
+  assert.equal(saved.name, 'boAt earbuds');
+  assert.equal(saved.category, 'Electronics');
+  assert.equal(saved.offers.length, 3);
+
+  // Whole store list: change one price, drop one store, add a new one.
+  const [a, b] = saved.offers.sort((x, y) => x.id - y.id);
+  r = await patch({ offers: [{ ...a, deliveryFee: a.delivery_fee, price: 1299 }, { id: b.id, store: b.store, price: b.price, url: b.url }, offer('Croma', 1350)] });
+  saved = await r.json();
+  assert.equal(saved.offers.length, 3);
+  assert.equal(saved.offers.find(o => o.id === a.id).price, 1299);
+  assert.ok(saved.offers.find(o => o.id === b.id));
+  assert.ok(saved.offers.find(o => o.store === 'Croma'));
+  assert.ok(!saved.offers.find(o => o.store === 'Meesho'));
+  // The edited store's Buy link still works.
+  assert.equal((await fetch(`${base}/api/go/${a.id}`, { redirect: 'manual' })).status, 302);
+
+  // Bad edits are refused and change nothing.
+  r = await patch({ name: '', image: 'http://x' });
+  assert.equal(r.status, 400);
+  assert.deepEqual((await r.json()).errors, ['Add a product name.', 'The photo link must start with https://']);
+  assert.equal((await fetch(`${base}/api/admin/products/99999`, { method: 'PATCH', headers: H, body: '{}' })).status, 404);
+  assert.equal((await fetch(`${base}/api/admin/products/${p.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"name":"x"}' })).status, 401);
+}, { adminKey: 'k' }));
+
+test('admin can edit a hand-added deal', () => withServer(async base => {
+  const H = { 'X-Admin-Key': 'k', 'Content-Type': 'application/json' };
+  const d = await (await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: H, body: JSON.stringify({ title: '40% off shoes', url: 'https://www.myntra.com/shoes', store: 'Myntra', code: 'RUN40' }) })).json();
+  let r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ endsAt: '31/12/2030' }) });
+  let saved = await r.json();
+  assert.equal(saved.ends_at, '2030-12-31');
+  assert.equal(saved.code, 'RUN40');
+  assert.equal(saved.title, '40% off shoes');
+  r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ title: '50% off shoes', code: '' }) });
+  saved = await r.json();
+  assert.equal(saved.title, '50% off shoes');
+  assert.equal(saved.code, null);
+  r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ url: 'ftp://x' }) });
+  assert.equal(r.status, 400);
+}, { adminKey: 'k' }));
