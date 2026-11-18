@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances, cuelinksCid = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, cuelinksCid, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -335,6 +335,21 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
     const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();
     assert.ok(chk.offerFields.includes('coupon_code'));
   }, { adminKey: 'k', deals });
+
+  // With the Cuelinks channel id set, deals go through our server to a linksredirect.com tracking link.
+  await withServer(async base => {
+    const pub = await (await fetch(`${base}/api/deals`)).json();
+    const d = pub.deals.find(x => x.title === 'Flat 20% off shoes');
+    assert.match(d.url, /^\/api\/go\/cuelinks\//);
+    const r = await fetch(base + d.url, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), 'https://linksredirect.com/?cid=335585&source=linkkit&url=' + encodeURIComponent('https://www.myntra.com/shoes?x=1&y=2'));
+    assert.equal((await fetch(`${base}/api/go/cuelinks/nope`, { redirect: 'manual' })).status, 404);
+    // A Buy button for a store EarnKaro can't convert also gets the Cuelinks link.
+    const buy = await fetch(`${base}/api/go/1`, { redirect: 'manual' });
+    assert.equal(buy.status, 302);
+    assert.match(buy.headers.get('location'), /^https:\/\/linksredirect\.com\/\?cid=335585&source=linkkit&url=https%3A%2F%2F/);
+  }, { deals, cuelinksCid: '335585' });
 });
 
 const { createEarnKaro } = require('../server/earnkaro');
