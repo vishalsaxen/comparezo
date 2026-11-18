@@ -40,13 +40,19 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     next();
   });
   // A store link -> the link that earns commission: Admitad links as they are, then EarnKaro,
-  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, else the plain link.
-  const viaGo = earnkaro.connected || affalliances.connected;
+  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, then Cuelinks, else the plain link.
+  // Cuelinks tracking link for a store page: linksredirect.com with the channel id (CUELINKS_CID).
+  // Built on the server because the Cuelinks page script did not rewrite clicks on the live site.
+  const cuelinksOn = /^\d{1,12}$/.test(cuelinksCid);
+  const cuelinksLink = url => `https://linksredirect.com/?cid=${cuelinksCid}&source=linkkit&url=${encodeURIComponent(url)}`;
+  const viaGo = earnkaro.connected || affalliances.connected || cuelinksOn;
   async function commissionLink(url) {
     if (isAdmitadLink(url)) return url;
     const ek = await earnkaro.convert(url);
     if (ek && ek !== url) return ek;
-    return affalliances.convert(url) || url;
+    const aa = affalliances.convert(url);
+    if (aa) return aa;
+    return cuelinksOn ? cuelinksLink(url) : url;
   }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
   app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
@@ -241,11 +247,13 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
     image: d.image || null, url: viaGo ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
+  // Cuelinks deals go through /api/go/cuelinks/<id>, which sends the shopper on with the Cuelinks tracking link.
+  const cuelinksDeal = d => (cuelinksOn ? { ...d, url: `/api/go/cuelinks/${encodeURIComponent(d.id)}` } : d);
   // Order: the owner's own deals, then Admitad, then Cuelinks.
   async function allDeals() {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals] };
+    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals.map(cuelinksDeal)] };
   }
   app.get('/api/deals', async (_req, res) => res.json(await allDeals()));
 
@@ -276,6 +284,11 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
     if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
     res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(d.url));
+  });
+  app.get('/api/go/cuelinks/:id', async (req, res) => {
+    const d = cuelinksOn && (await deals.list()).deals.find(x => x.id === req.params.id);
+    if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
+    res.set('Cache-Control', 'no-store').redirect(302, cuelinksLink(d.url));
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
   const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
