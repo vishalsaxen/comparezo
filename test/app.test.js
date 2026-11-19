@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals, earnkaro, admitad } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances, cuelinksCid = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, cuelinksCid, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -335,6 +335,21 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
     const chk = await (await fetch(`${base}/api/admin/deals/check`, { headers: { 'X-Admin-Key': 'k' } })).json();
     assert.ok(chk.offerFields.includes('coupon_code'));
   }, { adminKey: 'k', deals });
+
+  // With the Cuelinks channel id set, deals go through our server to a linksredirect.com tracking link.
+  await withServer(async base => {
+    const pub = await (await fetch(`${base}/api/deals`)).json();
+    const d = pub.deals.find(x => x.title === 'Flat 20% off shoes');
+    assert.match(d.url, /^\/api\/go\/cuelinks\//);
+    const r = await fetch(base + d.url, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), 'https://linksredirect.com/?cid=335585&source=linkkit&url=' + encodeURIComponent('https://www.myntra.com/shoes?x=1&y=2'));
+    assert.equal((await fetch(`${base}/api/go/cuelinks/nope`, { redirect: 'manual' })).status, 404);
+    // A Buy button for a store EarnKaro can't convert also gets the Cuelinks link.
+    const buy = await fetch(`${base}/api/go/1`, { redirect: 'manual' });
+    assert.equal(buy.status, 302);
+    assert.match(buy.headers.get('location'), /^https:\/\/linksredirect\.com\/\?cid=335585&source=linkkit&url=https%3A%2F%2F/);
+  }, { deals, cuelinksCid: '335585' });
 });
 
 const { createEarnKaro } = require('../server/earnkaro');
@@ -437,3 +452,77 @@ test('Admitad deals: signs in once, reads coupons for the website, maps and cach
     assert.equal((await fetch(`${base}/api/admin/admitad/check`)).status, 401);
   }, { adminKey: 'k', admitad });
 });
+
+const { createAffAlliances, parseLinks } = require('../server/affalliances');
+test('Aff Alliances: tracking links from AFFALLIANCES_LINKS are used on Buy after EarnKaro, matched by store domain', async () => {
+  assert.deepEqual(parseLinks('bad; www.Amazonin.com=https://t.example/c?o=1&url={url}\nfoo=http://insecure').map(e => e.domain), ['amazonin.com']);
+  const aa = createAffAlliances({ links: 'amazonin.com=https://t.example/c?o=1&url={url};meesho.com=https://t.example/c?o=2' });
+  assert.equal(aa.convert('https://shop.lenovo.com/x'), null);
+  assert.equal(aa.convert('https://www.meesho.com/p/1'), 'https://t.example/c?o=2');
+  assert.equal(aa.convert('https://www.amazonin.com/dp/1?a=b'), 'https://t.example/c?o=1&url=' + encodeURIComponent('https://www.amazonin.com/dp/1?a=b'));
+
+  await withServer(async base => {
+    const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+    const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+    const amazon = detail.offers.find(o => o.store === 'Amazon.in');
+    assert.equal(amazon.buyUrl, `/api/go/${amazon.id}`);
+    const r = await fetch(`${base}/api/go/${amazon.id}`, { redirect: 'manual' });
+    assert.match(r.headers.get('location'), /^https:\/\/t\.example\/c\?o=1&url=https%3A%2F%2Fwww\.amazonin\.com/);
+    const other = detail.offers.find(o => !/amazonin|meesho/.test(o.buyUrl === `/api/go/${o.id}` ? '' : o.buyUrl) && o.store !== 'Amazon.in' && o.store !== 'Meesho');
+    if (other) assert.doesNotMatch((await fetch(`${base}/api/go/${other.id}`, { redirect: 'manual' })).headers.get('location'), /t\.example/);
+    const e = await (await fetch(`${base}/api/admin/earnings`, { headers: { 'X-Admin-Key': 'k' } })).json();
+    const row = e.networks.find(n => n.id === 'affalliances');
+    assert.equal(row.connected, true);
+    assert.equal(row.auto, false);
+  }, { adminKey: 'k', affalliances: aa });
+});
+
+test('admin can edit one field or the whole product, keeping store ids for Buy links', () => withServer(async base => {
+  const H = { 'X-Admin-Key': 'k', 'Content-Type': 'application/json' };
+  const list = await (await fetch(`${base}/api/admin/products`, { headers: H })).json();
+  const p = list.find(x => x.name === 'Wireless earbuds');
+  const patch = body => fetch(`${base}/api/admin/products/${p.id}`, { method: 'PATCH', headers: H, body: JSON.stringify(body) });
+
+  // One field: everything else stays as saved.
+  let r = await patch({ name: 'boAt earbuds' });
+  assert.equal(r.status, 200);
+  let saved = await r.json();
+  assert.equal(saved.name, 'boAt earbuds');
+  assert.equal(saved.category, 'Electronics');
+  assert.equal(saved.offers.length, 3);
+
+  // Whole store list: change one price, drop one store, add a new one.
+  const [a, b] = saved.offers.sort((x, y) => x.id - y.id);
+  r = await patch({ offers: [{ ...a, deliveryFee: a.delivery_fee, price: 1299 }, { id: b.id, store: b.store, price: b.price, url: b.url }, offer('Croma', 1350)] });
+  saved = await r.json();
+  assert.equal(saved.offers.length, 3);
+  assert.equal(saved.offers.find(o => o.id === a.id).price, 1299);
+  assert.ok(saved.offers.find(o => o.id === b.id));
+  assert.ok(saved.offers.find(o => o.store === 'Croma'));
+  assert.ok(!saved.offers.find(o => o.store === 'Meesho'));
+  // The edited store's Buy link still works.
+  assert.equal((await fetch(`${base}/api/go/${a.id}`, { redirect: 'manual' })).status, 302);
+
+  // Bad edits are refused and change nothing.
+  r = await patch({ name: '', image: 'http://x' });
+  assert.equal(r.status, 400);
+  assert.deepEqual((await r.json()).errors, ['Add a product name.', 'The photo link must start with https://']);
+  assert.equal((await fetch(`${base}/api/admin/products/99999`, { method: 'PATCH', headers: H, body: '{}' })).status, 404);
+  assert.equal((await fetch(`${base}/api/admin/products/${p.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"name":"x"}' })).status, 401);
+}, { adminKey: 'k' }));
+
+test('admin can edit a hand-added deal', () => withServer(async base => {
+  const H = { 'X-Admin-Key': 'k', 'Content-Type': 'application/json' };
+  const d = await (await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: H, body: JSON.stringify({ title: '40% off shoes', url: 'https://www.myntra.com/shoes', store: 'Myntra', code: 'RUN40' }) })).json();
+  let r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ endsAt: '31/12/2030' }) });
+  let saved = await r.json();
+  assert.equal(saved.ends_at, '2030-12-31');
+  assert.equal(saved.code, 'RUN40');
+  assert.equal(saved.title, '40% off shoes');
+  r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ title: '50% off shoes', code: '' }) });
+  saved = await r.json();
+  assert.equal(saved.title, '50% off shoes');
+  assert.equal(saved.code, null);
+  r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ url: 'ftp://x' }) });
+  assert.equal(r.status, 400);
+}, { adminKey: 'k' }));

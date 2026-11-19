@@ -113,6 +113,16 @@ Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard â†
 
 Set `EARNKARO_API_KEY` to your EarnKaro API key. "Buy on <store>" then goes through `/api/go/<offer>`, which asks EarnKaro (`server/earnkaro.js`) for your commission link and sends the shopper there. Each link is converted once and remembered. If EarnKaro doesn't support the store or is down, the shopper goes to the plain store link. The key stays on the server.
 
+### Commission links with Aff Alliances
+
+Aff Alliances (affalliances.com) has no public publisher API, so there is nothing to auto-fill: no deeplink, coupon or earnings endpoints. What you get after approval is a tracking link for each offer you take (from the Offers page or your account manager). Put them in `AFFALLIANCES_LINKS`, one per store as `<store domain>=<tracking link>`, separated by `;` or new lines, for example:
+
+```
+lenovo.com=https://track.example/click?o=12&a=34&url={url};asus.com=https://track.example/click?o=56&a=34
+```
+
+If the link contains `{url}`, the shopper's product link is put there (URL-encoded), so they land on the product; without it they land on the offer's own page. Buy (`/api/go/<offer>`), your own deals and "Download with affiliate links" then use the Aff Alliances link for those stores whenever EarnKaro gives no commission link. Earnings are typed in on `/earnings.html` from the Aff Alliances dashboard (`server/affalliances.js`).
+
 ### Deals and coupons
 
 Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Number of deals now" section (with the live count) with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.

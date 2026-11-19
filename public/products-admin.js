@@ -39,7 +39,7 @@ $('p-cat').addEventListener('change', fillSubs);
 $('p-sub').addEventListener('change', fillTypes);
 
 /* Store rows */
-function addOfferRow() {
+function addOfferRow(box = $('offers')) {
   const row = document.createElement('div');
   row.className = 'offer-row';
   row.innerHTML = `
@@ -56,9 +56,10 @@ function addOfferRow() {
     const hit = Object.keys(guess).find(d => host === d || host.endsWith('.' + d));
     if (hit) row.querySelector('[data-f=store]').value = guess[hit];
   });
-  $('offers').appendChild(row);
+  box.appendChild(row);
+  return row;
 }
-$('addOffer').addEventListener('click', addOfferRow);
+$('addOffer').addEventListener('click', () => addOfferRow());
 $('offers').addEventListener('click', e => {
   if (!e.target.closest('[data-remove]')) return;
   if ($('offers').children.length > 1) e.target.closest('.offer-row').remove();
@@ -87,13 +88,109 @@ let added = [];
 async function loadList() {
   const list = added = await call('GET', '/api/admin/products');
   $('listWrap').hidden = false;
-  $('list').innerHTML = list.length ? list.map(p => `<div class="panel cat-card"><div class="cat-row">
+  $('list').innerHTML = list.length ? list.map(p => `<div class="panel cat-card" data-card="${p.id}"><div class="cat-row">
       <span class="cat-name">${esc(p.name)} <span class="sub">· ${esc([p.category, p.sub_category, p.type].filter(Boolean).join(' › '))}</span><br>
       <span class="sub">${p.offers.map(o => `${esc(o.store)} ${inr(o.price)}`).join(' · ')}</span></span>
-      <span class="cat-actions"><button type="button" class="btn btn-ghost small danger" data-del="${p.id}" data-name="${esc(p.name)}">Delete</button></span>
+      <span class="cat-actions"><button type="button" class="btn btn-ghost small" data-edit="${p.id}">Edit</button>
+        <button type="button" class="btn btn-ghost small danger" data-del="${p.id}" data-name="${esc(p.name)}">Delete</button></span>
     </div></div>`).join('') : '<p class="sub">Nothing added yet.</p>';
 }
+
+/* Edit a product in place: the form opens under it, filled with what is saved, so you can change
+   one field or all of them. Store rows keep their id, so shoppers' Buy links keep working. */
+function cascade(form) {
+  const [cat, sub, type, typeWrap] = ['cat', 'sub', 'type', 'type-wrap'].map(k => form.querySelector(`[data-e="${k}"]`));
+  const subs = () => { const c = tree.find(x => x.name === cat.value); return c ? c.subcategories : []; };
+  const types = () => { const s = subs().find(x => x.name === sub.value); return s ? s.types : []; };
+  const fillTypes = (want = '') => {
+    const t = types();
+    typeWrap.hidden = !t.length;
+    type.innerHTML = t.length ? opts(t, 'Pick a type') : '';
+    if (want) type.value = want;
+  };
+  const fillSubs = (want = '', wantType = '') => {
+    const s = subs();
+    sub.innerHTML = s.length ? opts(s, 'Pick a sub-category') : '<option value="">None</option>';
+    sub.disabled = !s.length;
+    if (want) sub.value = want;
+    fillTypes(wantType);
+  };
+  cat.addEventListener('change', () => fillSubs());
+  sub.addEventListener('change', () => fillTypes());
+  return { fillSubs };
+}
+function fillOfferRow(row, o) {
+  const sel = row.querySelector('[data-f=store]');
+  if (o.store && ![...sel.options].some(x => x.value === o.store)) sel.insertAdjacentHTML('afterbegin', `<option>${esc(o.store)}</option>`);
+  sel.value = o.store || sel.value;
+  row.querySelector('[data-f=price]').value = o.price ?? '';
+  row.querySelector('[data-f=mrp]').value = o.mrp ?? '';
+  row.querySelector('[data-f=deliveryFee]').value = o.delivery_fee || '';
+  row.querySelector('[data-f=url]').value = o.url || '';
+  row.insertAdjacentHTML('beforeend', `<input type="hidden" data-f="id" value="${o.id}">`);
+}
+function openEdit(card, p) {
+  const form = document.createElement('form');
+  form.className = 'sell-form edit-form';
+  form.noValidate = true;
+  form.innerHTML = `
+    <div class="field full"><label>Product name</label><input data-e="name" maxlength="200" value="${esc(p.name)}"></div>
+    <div class="field"><label>Category</label><select data-e="cat">${opts(tree, 'Pick a category')}</select></div>
+    <div class="field"><label>Sub-category</label><select data-e="sub"></select></div>
+    <div class="field" data-e="type-wrap" hidden><label>Type</label><select data-e="type"></select></div>
+    <div class="field full"><label>Short details</label><input data-e="spec" maxlength="200" value="${esc(p.spec || '')}"></div>
+    <div class="field full"><label>Photo link</label><input data-e="image" value="${esc(p.image || '')}" placeholder="https://…"></div>
+    <div class="field full"><span class="label">Where to buy</span><div class="offer-rows" data-e="offers"></div>
+      <button type="button" class="btn btn-ghost small" data-e="add">+ Add another store</button></div>
+    <div class="form-actions">
+      <button class="btn btn-brand" type="submit">Save changes</button>
+      <button type="button" class="btn btn-ghost" data-e="cancel">Cancel</button>
+      <span role="status" data-e="status"></span>
+    </div>`;
+  card.appendChild(form);
+  const q = k => form.querySelector(`[data-e="${k}"]`);
+  const cat = q('cat');
+  if (p.category && ![...cat.options].some(x => x.value === p.category)) cat.insertAdjacentHTML('beforeend', `<option>${esc(p.category)}</option>`);
+  cat.value = p.category || '';
+  cascade(form).fillSubs(p.sub_category || '', p.type || '');
+  const box = q('offers');
+  for (const o of p.offers) fillOfferRow(addOfferRow(box), o);
+  if (!p.offers.length) addOfferRow(box);
+  q('add').addEventListener('click', () => addOfferRow(box));
+  box.addEventListener('click', e => {
+    if (e.target.closest('[data-remove]') && box.children.length > 1) e.target.closest('.offer-row').remove();
+  });
+  q('cancel').addEventListener('click', () => closeEdit(card));
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const offers = [...box.children].map(r => Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, i.value.trim()])));
+    const body = { name: q('name').value.trim(), category: cat.value, subCategory: q('sub').value, type: q('type').value,
+      spec: q('spec').value.trim(), image: q('image').value.trim(), offers };
+    const st = q('status');
+    st.className = ''; st.textContent = 'Saving…';
+    try {
+      const saved = await call('PATCH', `/api/admin/products/${p.id}`, body);
+      toast(`Saved ${saved.name || body.name}.`);
+      loadList();
+    } catch (err) { st.className = 'err'; st.textContent = err.message; }
+  });
+  card.querySelector('[data-edit]').textContent = 'Close';
+  q('name').focus();
+}
+function closeEdit(card) {
+  const f = card.querySelector('.edit-form');
+  if (f) f.remove();
+  card.querySelector('[data-edit]').textContent = 'Edit';
+}
 $('list').addEventListener('click', async e => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) {
+    const card = ed.closest('[data-card]');
+    if (card.querySelector('.edit-form')) return closeEdit(card);
+    const p = added.find(x => String(x.id) === ed.dataset.edit);
+    if (p) openEdit(card, p);
+    return;
+  }
   const b = e.target.closest('[data-del]'); if (!b) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to delete'; return; }
   try { await call('DELETE', `/api/admin/products/${b.dataset.del}`); toast(`Deleted ${b.dataset.name}.`); loadList(); }
@@ -121,12 +218,14 @@ $('d-url').addEventListener('change', e => {
   if (hit) $('d-store').value = STORE_HOSTS[hit];
 });
 const today = () => new Date().toISOString().slice(0, 10);
+let myDeals = [];
 async function loadMyDeals() {
-  const list = await call('GET', '/api/admin/my-deals');
-  $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card"><div class="cat-row">
+  const list = myDeals = await call('GET', '/api/admin/my-deals');
+  $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card" data-deal-card="${d.id}"><div class="cat-row">
       <span class="cat-name">${esc(d.title)} <span class="sub">${d.store ? '· ' + esc(d.store) : ''}${d.code ? ' · code ' + esc(d.code) : ''}</span><br>
       <span class="sub">${d.ends_at ? (d.ends_at < today() ? 'Ended ' : 'Ends ') + esc(d.ends_at) : 'No end date'} · <a href="${esc(d.url)}" target="_blank" rel="noopener">link</a></span></span>
-      <span class="cat-actions"><button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
+      <span class="cat-actions"><button type="button" class="btn btn-ghost small" data-edit-deal="${d.id}">Edit</button>
+        <button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
     </div></div>`).join('') : '<p class="sub">No deals added yet.</p>';
 }
 $('dealForm').addEventListener('submit', async e => {
@@ -140,7 +239,49 @@ $('dealForm').addEventListener('submit', async e => {
     loadMyDeals();
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
 });
+function openDealEdit(card, d) {
+  const form = document.createElement('form');
+  form.className = 'sell-form edit-form';
+  form.noValidate = true;
+  form.innerHTML = `
+    <div class="field full"><label>Deal title</label><input data-e="title" maxlength="160" value="${esc(d.title)}"></div>
+    <div class="field"><label>Store</label><input data-e="store" maxlength="60" list="d-stores" value="${esc(d.store || '')}"></div>
+    <div class="field"><label>Coupon code</label><input data-e="code" maxlength="40" value="${esc(d.code || '')}" placeholder="Leave empty if none"></div>
+    <div class="field full"><label>Deal link</label><input data-e="url" inputmode="url" value="${esc(d.url)}"></div>
+    <div class="field full"><label>Details</label><input data-e="description" maxlength="300" value="${esc(d.description || '')}"></div>
+    <div class="field"><label>Photo link</label><input data-e="image" value="${esc(d.image || '')}" placeholder="https://…"></div>
+    <div class="field"><label>Ends on</label><input data-e="endsAt" type="date" value="${esc(d.ends_at || '')}"></div>
+    <div class="form-actions">
+      <button class="btn btn-brand" type="submit">Save changes</button>
+      <button type="button" class="btn btn-ghost" data-e="cancel">Cancel</button>
+      <span role="status" data-e="status"></span>
+    </div>`;
+  card.appendChild(form);
+  const q = k => form.querySelector(`[data-e="${k}"]`);
+  const btn = card.querySelector('[data-edit-deal]');
+  const close = () => { form.remove(); btn.textContent = 'Edit'; };
+  q('cancel').addEventListener('click', close);
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(['title', 'store', 'code', 'url', 'description', 'image', 'endsAt'].map(k => [k, q(k).value.trim()]));
+    const st = q('status');
+    st.className = ''; st.textContent = 'Saving…';
+    try { const saved = await call('PATCH', `/api/admin/my-deals/${d.id}`, body); toast(`Saved ${saved.title}.`); loadMyDeals(); }
+    catch (err) { st.className = 'err'; st.textContent = err.message; }
+  });
+  btn.textContent = 'Close';
+  q('title').focus();
+}
 $('myDeals').addEventListener('click', async e => {
+  const ed = e.target.closest('[data-edit-deal]');
+  if (ed) {
+    const card = ed.closest('[data-deal-card]');
+    const open = card.querySelector('.edit-form');
+    if (open) { open.remove(); ed.textContent = 'Edit'; return; }
+    const d = myDeals.find(x => String(x.id) === ed.dataset.editDeal);
+    if (d) openDealEdit(card, d);
+    return;
+  }
   const b = e.target.closest('[data-del-deal]'); if (!b) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to delete'; return; }
   try { await call('DELETE', `/api/admin/my-deals/${b.dataset.delDeal}`); toast(`Deleted ${b.dataset.name}.`); loadMyDeals(); }
@@ -364,12 +505,181 @@ $('dealBulkForm').addEventListener('submit', async e => {
   finally { $('dealBulkAdd').disabled = false; }
 });
 
+/* Find in stores: search connected stores by name, tick listings, add them as one product. */
+const STORE_COLORS = { 'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c', 'JioMart': '#1f7a8c', 'Snapdeal': '#d23b3b', 'Ajio': '#2c4152', 'BigBasket': '#689f38', 'FirstCry': '#f2711c', 'Nykaa': '#e80071', 'Croma': '#159a8c', 'Reliance Digital': '#c8102e', 'Tata CLiQ': '#8a2be2' };
+const colorOf = s => STORE_COLORS[s] || '#6b7d78';
+const sdot = s => `<span class="sdot" style="background:${colorOf(s)}"></span>`;
+const BOX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>';
+const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+const img = (url, alt = '') => url ? `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer" data-fallback>` : BOX;
+// A store photo that fails to load is swapped for the plain box drawing.
+document.addEventListener('error', e => { const t = e.target; if (t.tagName === 'IMG' && t.hasAttribute('data-fallback')) t.outerHTML = BOX; }, true);
+
+const find = { results: [], store: 'all', sort: 'match', picked: new Set(), photo: null, nameEdited: false };
+
+function reviewSubs() {
+  const c = tree.find(x => x.name === $('r-cat').value);
+  const subs = c ? c.subcategories : [];
+  $('r-sub').innerHTML = subs.length ? opts(subs, 'Pick a sub-category') : '<option value="">None</option>';
+  $('r-sub').disabled = !subs.length;
+  reviewTypes();
+}
+function reviewTypes() {
+  const c = tree.find(x => x.name === $('r-cat').value);
+  const s = c && c.subcategories.find(x => x.name === $('r-sub').value);
+  const types = s ? s.types : [];
+  $('r-type-wrap').hidden = !types.length;
+  $('r-type').innerHTML = types.length ? opts(types, 'Pick a type') : '';
+}
+$('r-cat').addEventListener('change', reviewSubs);
+$('r-sub').addEventListener('change', reviewTypes);
+
+$('findForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('findQ').value.trim();
+  if (!q) { $('findQ').focus(); return; }
+  $('findBtn').disabled = true; $('findBtn').textContent = 'Searching…';
+  $('findSummary').textContent = 'Asking the connected stores. This can take a few seconds.';
+  try {
+    const r = await call('GET', `/api/admin/store-search?q=${encodeURIComponent(q)}`);
+    Object.assign(find, { searched: true, results: r.results || [], store: 'all', picked: new Set(), photo: null, nameEdited: false });
+    (r.results || []).filter(x => x.match === 'exact').forEach(x => { if (![...find.picked].some(id => find.results[id - 1].store === x.store)) find.picked.add(x.id); });
+    $('findSummary').textContent = r.error || `${find.results.length} listing${find.results.length === 1 ? '' : 's'} from ${new Set(find.results.map(x => x.store)).size} store${new Set(find.results.map(x => x.store)).size === 1 ? '' : 's'}`;
+    $('findOnSite').hidden = !(r.onSite && r.onSite.length);
+    $('findOnSite').innerHTML = (r.onSite || []).length ? `<div class="onsite">Already on Comparezo: ${r.onSite.map(p => `<strong>${esc(p.name)}</strong> (${p.storeCount} store${p.storeCount === 1 ? '' : 's'}${p.lowest ? ', from ' + inr(p.lowest) : ''})`).join(', ')}. Check it isn't the same product before adding.</div>` : '';
+    renderSources(r);
+    renderFind();
+  } catch (err) { $('findSummary').textContent = err.message; }
+  finally { $('findBtn').disabled = false; $('findBtn').textContent = 'Search stores'; }
+});
+
+function renderSources(r) {
+  const searched = (r.sources || []).map(s => `<li><strong>${esc(s.name)}</strong>: ${s.ok
+    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}`
+    : `<span class="err">${esc(s.error)}</span>`}</li>`);
+  const off = Object.entries(r.notConnected || {}).map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`);
+  $('findSources').hidden = !searched.length && !off.length;
+  $('findSources').innerHTML = `<div class="src-box">
+    <div><strong>Searched</strong>${searched.length ? `<ul class="src-list">${searched.join('')}</ul>` : '<p class="sub" style="margin:2px 0 0">No store search is connected yet, so nothing can be found by name.</p>'}</div>
+    ${off.length ? `<div><strong>Not searched</strong><ul class="src-list">${off.join('')}</ul></div>` : ''}
+  </div>`;
+}
+
+function renderFind() {
+  const counts = {};
+  find.results.forEach(r => { counts[r.store] = (counts[r.store] || 0) + 1; });
+  $('findBar').hidden = !find.results.length;
+  $('findChips').innerHTML = `<button type="button" class="chip" data-s="all" aria-pressed="${find.store === 'all'}">All stores<span class="n">${find.results.length}</span></button>` +
+    Object.keys(counts).sort().map(s => `<button type="button" class="chip" data-s="${esc(s)}" aria-pressed="${find.store === s}">${sdot(s)}${esc(s)}<span class="n">${counts[s]}</span></button>`).join('');
+  let rows = find.results.filter(r => find.store === 'all' || r.store === find.store);
+  rows = rows.slice().sort(find.sort === 'price' ? (a, b) => a.price - b.price : (a, b) => a.id - b.id);
+  $('findResults').innerHTML = rows.length ? rows.map(r => {
+    const on = find.picked.has(r.id);
+    const off = r.mrp ? Math.round((1 - r.price / r.mrp) * 100) : 0;
+    return `<label class="rcard${on ? ' sel' : ''}" data-id="${r.id}">
+      <input type="checkbox" ${on ? 'checked' : ''} aria-label="Select ${esc(r.store)}: ${esc(r.title)}">
+      <span class="pick">${TICK}</span>
+      <div class="rimg">${img(r.image, r.title)}</div>
+      <div class="rbody">
+        <div class="rstore"><span style="display:flex;align-items:center">${sdot(r.store)}${esc(r.store)}</span><span class="match ${r.match}">${r.match === 'exact' ? 'Same product' : 'Similar'}</span></div>
+        <div class="rtitle" title="${esc(r.title)}">${esc(r.title)}</div>
+        <div class="rprice"><span class="p">${inr(r.price)}</span>${r.mrp ? `<span class="strike">${inr(r.mrp)}</span><span class="off">${off}% off</span>` : ''}</div>
+        <div class="links">
+          <b>URL</b><code title="${esc(r.url)}">${esc(r.url.replace('https://', ''))}</code><a href="${esc(r.url)}" target="_blank" rel="noopener">Open</a>
+          <b>Image</b>${r.image ? `<code title="${esc(r.image)}">${esc(r.image.replace('https://', ''))}</code><a href="${esc(r.image)}" target="_blank" rel="noopener">View</a>` : '<code>none</code><span></span>'}
+        </div>
+        <div><span class="pill brand">From ${esc(r.source)}</span></div>
+      </div>
+    </label>`;
+  }).join('') : (find.searched ? '<div class="empty-state" style="grid-column:1/-1">No listings found in the connected stores. Check the spelling, or add the product in step 2 by pasting store links.</div>' : '');
+  renderTray(); renderReview();
+}
+
+const picked = () => find.results.filter(r => find.picked.has(r.id)).sort((a, b) => a.price - b.price);
+function renderTray() {
+  const p = picked();
+  $('findTray').hidden = !p.length;
+  if (!p.length) return;
+  $('findStack').innerHTML = p.slice(0, 5).map(r => `<span style="background:${colorOf(r.store)}">${esc(r.store[0])}</span>`).join('');
+  $('findTrayTxt').innerHTML = `<strong>${p.length} listing${p.length > 1 ? 's' : ''} selected</strong><br>Cheapest ${inr(p[0].price)} at ${esc(p[0].store)}`;
+}
+
+// A short product name from the store titles: the shortest exact-match title, cut at the first comma or bracket.
+function suggestName(p) {
+  const exact = p.filter(r => r.match === 'exact');
+  const t = (exact.length ? exact : p).map(r => r.title.split(/\s*[,(|]\s*|\s+-\s+/)[0].trim()).sort((a, b) => a.length - b.length)[0] || '';
+  return t.length >= 6 ? t : (p[0] ? p[0].title.slice(0, 120) : '');
+}
+
+function renderReview() {
+  const p = picked(), extra = $('r-offers').children.length;
+  $('reviewWrap').hidden = !find.searched && !extra;
+  $('reviewCount').textContent = p.length + extra ? `${p.length + extra} store${p.length + extra > 1 ? 's' : ''}` : 'Nothing selected yet';
+  if (!find.nameEdited) $('r-name').value = p.length ? suggestName(p) : '';
+  if (!p.some(r => r.id === find.photo)) find.photo = (p.find(r => r.image) || {}).id || null;
+  const withPhoto = p.filter(r => r.image);
+  $('photoPick').innerHTML = withPhoto.length ? withPhoto.map(r => `<label title="${esc(r.store)} photo"><input type="radio" name="r-photo" value="${r.id}" ${r.id === find.photo ? 'checked' : ''}><span></span>${img(r.image)}</label>`).join('')
+    : '<span class="hint">No photo from the selected stores. You can add one later.</span>';
+  $('selRows').innerHTML = p.map((r, i) => `<tr class="${i === 0 ? 'best' : ''}">
+      <td><div class="store">${sdot(r.store)}${esc(r.store)}</div>${i === 0 ? '<span class="tag tag-best">Cheapest</span>' : ''}</td>
+      <td class="r num" style="font-weight:600">${inr(r.price)}</td>
+      <td><code title="${esc(r.url)}">${esc(r.url.replace('https://', ''))}</code></td>
+      <td class="r"><button type="button" class="btn btn-ghost small danger" data-unpick="${r.id}">Remove</button></td>
+    </tr>`).join('') || '<tr><td colspan="4" class="sub">Tick listings in step 1, or add a store by link below.</td></tr>';
+  const ph = p.find(r => r.id === find.photo);
+  $('r-preview').innerHTML = p.length ? `<article class="lcard">
+      <div class="img">${img(ph && ph.image)}</div>
+      <div class="body"><div class="sub">From</div><div class="price num">${inr(p[0].price)}</div><div class="t">${esc($('r-name').value)}</div>
+      <div class="sub">${sdot(p[0].store)}Cheapest at ${esc(p[0].store)}</div>
+      <div class="row"><span class="sub">Compare ${p.length + extra} store${p.length + extra > 1 ? 's' : ''}</span><span class="btn">Compare</span></div></div></article>`
+    : '<div class="empty-state">Your product card appears here.</div>';
+}
+
+$('findChips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; find.store = b.dataset.s; renderFind(); });
+$('findSort').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  find.sort = b.dataset.sort;
+  $('findSort').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderFind();
+});
+$('findResults').addEventListener('change', e => {
+  const c = e.target.closest('.rcard'); if (!c) return;
+  const id = Number(c.dataset.id);
+  if (e.target.checked) find.picked.add(id); else find.picked.delete(id);
+  renderFind();
+});
+$('selRows').addEventListener('click', e => { const b = e.target.closest('[data-unpick]'); if (!b) return; find.picked.delete(Number(b.dataset.unpick)); renderFind(); });
+$('photoPick').addEventListener('change', e => { find.photo = Number(e.target.value); renderReview(); });
+$('r-name').addEventListener('input', () => { find.nameEdited = true; renderReview(); });
+$('findClear').addEventListener('click', () => { find.picked.clear(); renderFind(); });
+$('r-addOffer').addEventListener('click', () => { addOfferRow($('r-offers')); renderReview(); });
+$('r-offers').addEventListener('click', e => { if (!e.target.closest('[data-remove]')) return; e.target.closest('.offer-row').remove(); renderReview(); });
+
+$('reviewForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p = picked();
+  const extra = [...$('r-offers').children].map(r => Object.fromEntries([...r.querySelectorAll('[data-f]')].map(i => [i.dataset.f, i.value.trim()])));
+  const photo = p.find(r => r.id === find.photo);
+  const body = { name: $('r-name').value.trim(), category: $('r-cat').value, subCategory: $('r-sub').value, type: $('r-type').value,
+    spec: $('r-spec').value.trim(), image: photo ? photo.image : '',
+    offers: [...p.map(r => ({ store: r.store, price: r.price, mrp: r.mrp || undefined, url: r.url })), ...extra] };
+  const st = $('r-status');
+  try {
+    await call('POST', '/api/admin/products', body);
+    st.className = 'ok'; st.textContent = `Added "${body.name}" with ${body.offers.length} store${body.offers.length > 1 ? 's' : ''}. Shoppers now see it under Comparezo.`;
+    toast('Product added.');
+    Object.assign(find, { picked: new Set(), nameEdited: false });
+    $('r-offers').innerHTML = ''; $('r-spec').value = '';
+    renderFind(); loadList();
+  } catch (err) { st.className = 'err'; st.textContent = err.message; }
+});
+
 /* Unlock */
 async function unlock() {
   try {
     await call('POST', '/api/admin/check');
     keyStore.set(key);
-    $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false;
+    $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false; $('findWrap').hidden = false;
     loadList(); loadMyDeals();
   } catch (err) {
     $('keyStatus').className = 'err';
@@ -400,7 +710,8 @@ $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('admi
   tree = await (await fetch('/api/categories')).json();
   $('p-cat').innerHTML = opts(tree, 'Pick a category');
   $('b-cat').innerHTML = opts(tree, 'Pick a category');
-  fillSubs(); bulkSubs(); resetForm();
+  $('r-cat').innerHTML = opts(tree, 'Pick a category');
+  fillSubs(); bulkSubs(); reviewSubs(); resetForm();
   if (key) unlock();
 })();
 })();

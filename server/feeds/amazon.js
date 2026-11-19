@@ -46,12 +46,12 @@ function createAmazonFeed({ clientId, clientSecret, partnerTag, searches, market
     return token;
   }
 
-  async function search(s, page) {
+  async function search(s, page, sortBy = 'NewestArrivals') {
     const r = await fetch(`${apiBase}/searchItems`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json', 'x-marketplace': marketplace },
       body: JSON.stringify({ partnerTag, marketplace, keywords: s.keywords, searchIndex: s.searchIndex || 'All',
-        sortBy: 'NewestArrivals', itemCount: 10, itemPage: page, resources: RESOURCES }),
+        ...(sortBy && { sortBy }), itemCount: 10, itemPage: page, resources: RESOURCES }),
     });
     if (r.status === 404) return [];   // no more results
     if (!r.ok) throw new Error(`Amazon search "${s.keywords}" failed (${r.status})`);
@@ -76,7 +76,13 @@ function createAmazonFeed({ clientId, clientSecret, partnerTag, searches, market
     return summary;
   }
 
-  return { name: STORE, run };
+  // "Find in stores" on the admin page: one page of Amazon's own best matches for the words typed.
+  async function find(q) {
+    const items = await search({ keywords: q }, 1, null);
+    return items.map(it => toItem(it, {})).map(i => ({ store: STORE, title: i.name, price: i.price, mrp: i.mrp, url: i.url, image: i.image }));
+  }
+
+  return { name: STORE, run, find };
 }
 
 module.exports = { createAmazonFeed };

@@ -7,19 +7,25 @@ const { buyUrl } = require('./stores');
 const { getTrends } = require('./trends');
 const cats = require('./categories');
 const feeds = require('./feeds');
-const { addProduct, deleteProduct } = require('./catalog');
+const { addProduct, updateProduct, deleteProduct } = require('./catalog');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
+const { createAffAlliances } = require('./affalliances');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
+const { createStoreSearch } = require('./store-search');
+const { createPhoneAuth, createSpins } = require('./spin');
 
+
+// Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
+const isAdmitadLink = u => { try { return /(^|\.)admitad\.com$/.test(new URL(u).hostname); } catch { return false; } };
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -27,12 +33,27 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.use((req, res, next) => {
     const origin = req.get('origin');
     if (origin && allowed.has(origin)) {
-      res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+      res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE', 'Access-Control-Max-Age': '600' });
       if (req.method === 'OPTIONS') return res.sendStatus(204);
     }
     next();
   });
+  // A store link -> the link that earns commission: Admitad links as they are, then EarnKaro,
+  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, then Cuelinks, else the plain link.
+  // Cuelinks tracking link for a store page: linksredirect.com with the channel id (CUELINKS_CID).
+  // Built on the server because the Cuelinks page script did not rewrite clicks on the live site.
+  const cuelinksOn = /^\d{1,12}$/.test(cuelinksCid);
+  const cuelinksLink = url => `https://linksredirect.com/?cid=${cuelinksCid}&source=linkkit&url=${encodeURIComponent(url)}`;
+  const viaGo = earnkaro.connected || affalliances.connected || cuelinksOn;
+  async function commissionLink(url) {
+    if (isAdmitadLink(url)) return url;
+    const ek = await earnkaro.convert(url);
+    if (ek && ek !== url) return ek;
+    const aa = affalliances.convert(url);
+    if (aa) return aa;
+    return cuelinksOn ? cuelinksLink(url) : url;
+  }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
   app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
   // Tell the caller after every request that changed data, so it can be saved (see firestore-sync.js).
@@ -116,17 +137,18 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     if (!p) return res.status(404).json({ error: 'Product not found' });
     const includeExtras = req.query.extras !== '0';
     const comparison = compareOffers(offersFor.all(p.id), { includeExtras });
-    // With EarnKaro on, Buy goes through /api/go/<offer>, which swaps in the commission link.
-    comparison.offers.forEach(o => { const u = buyUrl(o, p.name); o.buyUrl = u && earnkaro.connected ? `/api/go/${o.id}` : u; });
+    // With EarnKaro or Aff Alliances on, Buy goes through /api/go/<offer>, which swaps in the commission link.
+    comparison.offers.forEach(o => { const u = buyUrl(o, p.name); o.buyUrl = u && viaGo ? `/api/go/${o.id}` : u; });
     res.json({ product: p, ...comparison, includeExtras });
   });
 
-  // Sends a shopper to the store through their EarnKaro commission link (or the plain link).
+  // Sends a shopper to the store through a commission link (EarnKaro, Aff Alliances) or the plain link.
   app.get('/api/go/:offerId', async (req, res) => {
     const o = db.prepare('SELECT o.*, p.name AS product_name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.id = ?').get(Number(req.params.offerId));
     const url = o && buyUrl(o, o.product_name);
     if (!url) return res.status(404).type('text/plain').send('This store link is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(url));
+    // Links that came from an Admitad feed already earn commission, so they are not sent to EarnKaro.
+    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(url));
   });
 
   // Record a Buy click (the shopper is sent to the store). This is what Linezo tracks.
@@ -172,16 +194,36 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
         const link = await earnkaro.convert(url);
         if (link && link !== url) return { url, link, via: 'EarnKaro' };
       }
+      const aa = affalliances.convert(url);
+      if (aa) return { url, link: aa, via: 'Aff Alliances' };
       if (admitad.connected && admitad.deeplink) {
         const r = await admitad.deeplink(url);
         if (r.link) return { url, link: r.link, via: 'Admitad' };
         return { url, link: null, via: null, note: (earnkaro.connected ? 'EarnKaro could not convert it. ' : '') + `Admitad: ${r.error}` };
       }
-      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY or the ADMITAD_* keys on the server.' };
+      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY, AFFALLIANCES_LINKS or the ADMITAD_* keys on the server.' };
     };
     const results = [];
     for (let i = 0; i < urls.length; i += 5) results.push(...await Promise.all(urls.slice(i, i + 5).map(one)));
-    res.json({ earnkaro: earnkaro.connected, admitad: !!admitad.connected, results });
+    res.json({ earnkaro: earnkaro.connected, affalliances: affalliances.connected, admitad: !!admitad.connected, results });
+  });
+  // "Find in stores": search every connected store's official API or product feed by name.
+  if (!storeSearch) {
+    const status = feedRunner.status ? feedRunner.status() : { notConnected: {} };
+    const sources = [...(feedRunner.searchers ? feedRunner.searchers() : [])];
+    const notConnected = { ...(status.notConnected || {}) };
+    if (admitad.connected && admitad.findProducts) sources.push({ name: 'Admitad', find: admitad.findProducts });
+    else notConnected.Admitad = 'Set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to search the product feeds of stores you joined in Admitad.';
+    notConnected.EarnKaro = 'EarnKaro only turns links into commission links. It has no product search, so stores you reach through EarnKaro are added by pasting their link.';
+    storeSearch = createStoreSearch(db, { sources, notConnected });
+  }
+  app.get('/api/admin/store-search', requireAdmin, async (req, res) => res.json(await storeSearch.search(req.query.q)));
+  // Edit a product: send only the fields to change, or all of them (see updateProduct in catalog.js).
+  app.patch('/api/admin/products/:id', requireAdmin, (req, res) => {
+    const r = updateProduct(db, Number(req.params.id), req.body || {});
+    if (r.notFound) return res.status(404).json({ error: 'Product not found.' });
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    res.json(manualProducts().find(p => p.id === r.id) || { id: r.id });
   });
   app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
@@ -200,22 +242,53 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
   // Deals and coupons: the owner's own (added on /products.html), Admitad (ADMITAD_* keys) and Cuelinks (CUELINKS_API_KEY).
-  // Expired own deals are hidden. With EarnKaro on, their links go through /api/go/deal/<id>.
+  // Expired own deals are hidden. With EarnKaro or Aff Alliances on, their links go through /api/go/deal/<id>.
   const today = () => new Date().toISOString().slice(0, 10);
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
-    image: d.image || null, url: earnkaro.connected ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
+    image: d.image || null, url: viaGo ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
+  // Cuelinks deals go through /api/go/cuelinks/<id>, which sends the shopper on with the Cuelinks tracking link.
+  const cuelinksDeal = d => (cuelinksOn ? { ...d, url: `/api/go/cuelinks/${encodeURIComponent(d.id)}` } : d);
   // Order: the owner's own deals, then Admitad, then Cuelinks.
-  app.get('/api/deals', async (_req, res) => {
+  async function allDeals() {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    res.json({ connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals] });
+    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals.map(cuelinksDeal)] };
+  }
+  app.get('/api/deals', async (_req, res) => res.json(await allDeals()));
+
+  // Spin to win (see spin.js). The page asks /api/spin/config whether it is switched on, the shopper
+  // verifies their number with a Firebase phone OTP, and POST /api/spin checks the Firebase ID token,
+  // saves the number and picks which of the wheel's deals they win.
+  const spins = createSpins(db);
+  app.get('/api/spin/config', (_req, res) => res.json({ enabled: !!phoneAuth.connected, firebase: firebaseWebConfig }));
+  app.post('/api/spin', async (req, res) => {
+    if (!phoneAuth.connected) return res.status(503).json({ error: 'Spin to win is not switched on yet.' });
+    const token = (String(req.get('authorization') || '').match(/^Bearer\s+(\S+)$/) || [])[1];
+    if (!token) return res.status(401).json({ error: 'Please verify your mobile number first.' });
+    let who;
+    try { who = await phoneAuth.verify(token); } catch { return res.status(401).json({ error: 'Your verification expired. Please verify your number again.' }); }
+    if (!who.phone) return res.status(401).json({ error: 'Please verify your mobile number first.' });
+    if (req.body?.consent !== true) return res.status(400).json({ error: 'Please agree to the consent line to play.' });
+    const ids = Array.isArray(req.body?.deals) ? [...new Set(req.body.deals.map(String))].slice(0, 4) : [];
+    const { deals: live } = await allDeals();
+    const onWheel = ids.map(id => live.find(d => d.id === id)).filter(Boolean);
+    if (!onWheel.length) return res.status(400).json({ error: 'These deals have changed. Close the wheel and open Super Saver Deals again.' });
+    const r = spins.spin({ phone: who.phone, uid: who.uid, deals: onWheel });
+    const deal = live.find(d => d.id === r.dealId) || null;
+    res.json({ already: r.already, index: ids.indexOf(r.dealId), deal });
   });
+  app.get('/api/admin/spin-players', requireAdmin, (_req, res) => res.json(spins.list()));
   app.get('/api/admin/admitad/check', requireAdmin, async (_req, res) => res.json(await admitad.check()));
   app.get('/api/go/deal/:id', async (req, res) => {
     const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
     if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, await earnkaro.convert(d.url));
+    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(d.url));
+  });
+  app.get('/api/go/cuelinks/:id', async (req, res) => {
+    const d = cuelinksOn && (await deals.list()).deals.find(x => x.id === req.params.id);
+    if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
+    res.set('Cache-Control', 'no-store').redirect(302, cuelinksLink(d.url));
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
   const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -252,6 +325,21 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     } catch (e) { db.exec('ROLLBACK'); throw e; }
     res.json({ added, skipped, problems });
   });
+  // Edit a deal: fields not sent keep their saved value.
+  app.patch('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    const old = db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id);
+    if (!old) return res.status(404).json({ error: 'Deal not found.' });
+    const b = req.body || {};
+    const pick = (k, saved) => (Object.prototype.hasOwnProperty.call(b, k) ? b[k] : saved);
+    const r = checkDeal({ title: pick('title', old.title), store: pick('store', old.store), code: pick('code', old.code), url: pick('url', old.url),
+      description: pick('description', old.description), image: pick('image', old.image), endsAt: pick('endsAt', old.ends_at) });
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    const d = r.deal;
+    db.prepare('UPDATE my_deals SET title = ?, store = ?, code = ?, url = ?, description = ?, image = ?, ends_at = ? WHERE id = ?')
+      .run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt, id);
+    res.json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id));
+  });
   app.delete('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
     const r = db.prepare('DELETE FROM my_deals WHERE id = ?').run(Number(req.params.id));
     if (!r.changes) return res.status(404).json({ error: 'Deal not found.' });
@@ -261,7 +349,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
 
   // Earnings page: money earned per affiliate network (see earnings.js). Owner only.
-  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected } });
+  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected, affalliances: !!affalliances.connected } });
   app.get('/api/admin/earnings', requireAdmin, async (req, res) => res.json(await earnings.report({ refresh: req.query.refresh === '1' })));
   app.post('/api/admin/earnings', requireAdmin, (req, res) => {
     const r = earnings.save(req.body);

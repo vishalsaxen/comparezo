@@ -88,7 +88,10 @@ function createFeedRunner(db, { feeds = [], missing = {} } = {}) {
     return setInterval(tick, hours * 3600_000).unref();
   }
 
-  return { runAll, status, schedule };
+  // Feeds that can also search by name, for "Find in stores" on the admin page.
+  const searchers = () => feeds.filter(f => typeof f.find === 'function').map(f => ({ name: f.name, find: f.find }));
+
+  return { runAll, status, schedule, searchers };
 }
 
 // Products from store feeds that arrived in the last `days` days, newest first.
