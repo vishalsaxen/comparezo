@@ -104,6 +104,16 @@ CREATE TABLE IF NOT EXISTS spin_players (
   last_deal_id TEXT,
   last_deal_title TEXT
 );
+-- Clicks on Super Saver Deals, one row per deal per day (India time). See deal-clicks.js.
+CREATE TABLE IF NOT EXISTS deal_clicks (
+  deal TEXT NOT NULL,             -- my-12 (own deal), admitad-345, cuelinks-678
+  day TEXT NOT NULL,              -- YYYY-MM-DD, India time
+  clicks INTEGER NOT NULL DEFAULT 0,
+  title TEXT,                     -- the deal's title and store when it was clicked, so old deals still have a name
+  store TEXT,
+  last_at TEXT,
+  PRIMARY KEY (deal, day)
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;

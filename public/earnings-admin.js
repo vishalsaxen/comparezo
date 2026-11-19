@@ -11,7 +11,7 @@ const keyStore = {
   set(v) { try { localStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
   clear() { try { localStorage.removeItem('cz-admin-key'); } catch { /* private mode */ } },
 };
-let key = keyStore.get(), report = null;
+let key = keyStore.get(), report = null, dealDays = 30;
 
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200); }
@@ -88,11 +88,58 @@ function render() {
   }
 }
 
+// Super Saver Deals: clicks per deal, and what each deal earned where the network reports sub IDs.
+const dayName = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const when = iso => iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—';
+function renderDeals(s) {
+  const e = s.earnings, ad = e.admitad;
+  const earned = ad.connected && !ad.error ? fmt(ad.pending + ad.confirmed) : '—';
+  $('dealKpis').innerHTML = [
+    ['Clicks today', s.totals.today], ['Last 7 days', s.totals.last7], ['Last 30 days', s.totals.last30],
+  ].map(([l, v]) => `<div class="kpi"><div class="sub">${l}</div><div class="v num">${Number(v).toLocaleString('en-IN')}</div></div>`).join('') +
+    `<div class="kpi"><div class="sub">Earned from deals (Admitad)</div><div class="v num">${earned}</div>${ad.connected && !ad.error ? `<span class="sub">${fmt(ad.confirmed)} confirmed</span>` : ''}</div>`;
+
+  const max = Math.max(1, ...s.perDay.map(d => d.clicks));
+  $('dealChart').innerHTML = s.perDay.map(d => `<span class="${d.clicks ? '' : 'zero'}" style="height:${(d.clicks / max * 100).toFixed(1)}%" title="${dayName(d.day)}: ${d.clicks} click${d.clicks === 1 ? '' : 's'}"></span>`).join('');
+  $('dealChart').setAttribute('aria-label', `Deal clicks per day, ${dayName(s.from)} to ${dayName(s.to)}: ${s.perDay.reduce((a, d) => a + d.clicks, 0)} in total`);
+  $('dealRangeHead').textContent = `Last ${s.days} days`;
+
+  $('dealRows').innerHTML = s.deals.length ? s.deals.map(d => `<tr>
+      <td><div class="t${d.live ? '' : ' gone'}">${esc(d.title)}</div><div class="sub">${esc(d.store)}${d.live ? '' : (d.store ? ' · ' : '') + 'no longer listed'}</div></td>
+      <td class="nowrap">${esc(d.network)}</td>
+      <td class="r num">${d.clicks.toLocaleString('en-IN')}</td>
+      <td class="r num">${d.allTime.toLocaleString('en-IN')}</td>
+      <td class="r num">${d.earned ? `${fmt(d.earned.pending + d.earned.confirmed, d.earned.currency)}<div class="sub">${fmt(d.earned.confirmed, d.earned.currency)} confirmed</div>` : '—'}</td>
+      <td class="nowrap sub">${when(d.lastAt)}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="sub">No deal clicks yet. ${s.liveDeals} deal${s.liveDeals === 1 ? ' is' : 's are'} on the Super Saver Deals tab; clicks show here from now on.</td></tr>`;
+
+  $('dealNote').innerHTML = [
+    '<strong>Earned per deal</strong> comes from Admitad, which reports money by the sub ID we add to each deal link.',
+    ad.error ? `<span class="warn-text">Admitad sub-ID report: ${esc(ad.error)}</span>` : !ad.connected ? 'Admitad keys are not on the server, so no per-deal earnings yet.' : '',
+    e.cuelinks.connected ? 'Cuelinks deal links carry the same sub ID (deals-…), so Cuelinks’ own reports can tell those apart; their API here only gives totals.' : '',
+    e.earnkaro.connected ? 'Your own deals that go through EarnKaro can’t be split per deal, since EarnKaro links carry no sub ID; they are in EarnKaro’s total below.' : '',
+    'Clicks from bots, link previews and double clicks within 30 seconds are not counted.',
+  ].filter(Boolean).join(' ');
+}
+async function loadDeals(refresh = false) {
+  try { renderDeals(await call('GET', `/api/admin/deal-stats?days=${dealDays}` + (refresh ? '&refresh=1' : ''))); }
+  catch (e) { if (e.status !== 401 && e.status !== 403) $('dealNote').textContent = 'Could not load deal clicks: ' + e.message; }
+}
+$('dealRange').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-days]');
+  if (!b) return;
+  dealDays = Number(b.dataset.days);
+  $('dealRange').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  loadDeals();
+});
+
 async function load(refresh = false) {
   if (!key) return locked();
   $('refresh').disabled = true;
   try {
+    const deals = loadDeals(refresh);
     report = await call('GET', '/api/admin/earnings' + (refresh ? '?refresh=1' : ''));
+    await deals;
     $('keyForm').hidden = true; $('board').hidden = false; $('controls').hidden = false;
     render();
     if (refresh) toast('Earnings refreshed.');

@@ -237,7 +237,41 @@ function createAdmitad({ clientId = '', clientSecret = '', websiteId = '', fetch
     return result;
   }
 
-  return { list, check, deeplink, earnings, findProducts, connected };
+  // Earnings split by sub ID, so the Earnings page can show what each Super Saver Deal earned.
+  // Deal links carry subid=deals-<deal id> (see deal-clicks.js). GET /statistics/sub_ids/ with the
+  // same "statistics" scope; each row has subid, payment_sum_open, payment_sum_approved and currency.
+  // Field names follow Admitad's "Statistics by sub-IDs" docs; not yet checked with the real keys.
+  let bySub = null;   // { at, result }
+  async function subidEarnings({ refresh = false } = {}) {
+    if (!connected) return { connected: false, bySubid: {} };
+    if (!refresh && bySub && now() - bySub.at < TTL_MS) return bySub.result;
+    let result;
+    try {
+      const token = await getToken(STATS_SCOPE);
+      const out = {};
+      for (let p = 0; p < 10; p++) {
+        const q = new URLSearchParams({ website: websiteId, date_start: ddmmyyyy(new Date(Date.UTC(2020, 0, 1))), date_end: ddmmyyyy(new Date(now())), limit: '500', offset: String(p * 500) });
+        const r = await fetch(`${API}/statistics/sub_ids/?${q}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+        const body = await r.json().catch(() => null);
+        if (r.status === 401) delete tokens[STATS_SCOPE];
+        if (!r.ok) throw new Error(`Admitad sub-ID report ${r.status}: ${(body && (body.error_description || body.error || body.detail)) || 'request failed'}`);
+        const rows = Array.isArray(body && body.results) ? body.results : [];
+        for (const row of rows) {
+          const id = String(row.subid || row.sub_id || '');
+          if (!id) continue;
+          const e = out[id] || (out[id] = { pending: 0, confirmed: 0, currency: String(row.currency || 'INR').toUpperCase(), network: 'Admitad' });
+          e.pending = Math.round((e.pending + (Number(row.payment_sum_open) || 0)) * 100) / 100;
+          e.confirmed = Math.round((e.confirmed + (Number(row.payment_sum_approved) || 0)) * 100) / 100;
+        }
+        if (rows.length < 500) break;
+      }
+      result = { connected: true, bySubid: out };
+    } catch (e) { result = { connected: true, bySubid: bySub ? bySub.result.bySubid : {}, error: e.message }; }
+    bySub = { at: result.error ? now() - TTL_MS + 5 * 60 * 1000 : now(), result };
+    return result;
+  }
+
+  return { list, check, deeplink, earnings, subidEarnings, findProducts, connected };
 }
 
 // Reads CSV text piece by piece and gives back rows as { column: value } objects.

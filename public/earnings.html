@@ -7,7 +7,7 @@
 <title>Earnings · Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-14c">
+<link rel="stylesheet" href="/styles.css?v=2026-11-19">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -48,6 +48,25 @@
   </form>
 
   <div id="board" hidden>
+    <section class="panel pad deal-stats" id="dealStats" aria-labelledby="dealStatsTitle">
+      <div class="deal-stats-head">
+        <div>
+          <h2 id="dealStatsTitle">Super Saver Deals</h2>
+          <p class="sub">Every “Get deal” click on the Super Saver Deals tab, counted by our server before the shopper goes to the store.</p>
+        </div>
+        <div class="seg" id="dealRange" role="group" aria-label="Range">
+          <button type="button" data-days="7" aria-pressed="false">7 days</button>
+          <button type="button" data-days="30" aria-pressed="true">30 days</button>
+          <button type="button" data-days="90" aria-pressed="false">90 days</button>
+        </div>
+      </div>
+      <div class="kpis" id="dealKpis"></div>
+      <div class="deal-chart" id="dealChart" role="img"></div>
+      <div class="tablebox"><table class="top-table deal-table"><thead><tr><th>Deal</th><th>Via</th><th class="r" id="dealRangeHead">Clicks</th><th class="r">All time</th><th class="r">Earned</th><th>Last click</th></tr></thead><tbody id="dealRows"></tbody></table></div>
+      <p class="sub" id="dealNote"></p>
+    </section>
+
+    <h2>All earnings by network</h2>
     <div class="kpis" id="kpis"></div>
     <p class="sub" id="totalsNote"></p>
 
@@ -76,6 +95,6 @@
   </div>
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
-<script src="/earnings-admin.js"></script>
+<script src="/earnings-admin.js?v=2026-11-19"></script>
 </body>
 </html>
