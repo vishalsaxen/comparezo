@@ -28,7 +28,7 @@ test('Earnings: owner only, typed-in entries are saved, replaced, summed and del
     assert.equal((await fetch(`${base}/api/admin/earnings`)).status, 401);
     let r = await call('GET', '/api/admin/earnings');
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body.networks.map(n => n.id), ['earnkaro', 'admitad', 'cuelinks', 'extrape', 'affalliances', 'partnerize']);
+    assert.deepEqual(r.body.networks.map(n => n.id), ['earnkaro', 'admitad', 'cuelinks', 'extrape', 'affalliances', 'inrdeals', 'partnerize']);
     assert.ok(r.body.networks.every(n => n.figures === null && n.dashboard.startsWith('https://')));
 
     assert.equal((await call('POST', '/api/admin/earnings', { network: 'nope', month: '2026-11' })).status, 400);

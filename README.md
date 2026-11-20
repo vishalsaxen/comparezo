@@ -123,6 +123,18 @@ lenovo.com=https://track.example/click?o=12&a=34&url={url};asus.com=https://trac
 
 If the link contains `{url}`, the shopper's product link is put there (URL-encoded), so they land on the product; without it they land on the offer's own page. Buy (`/api/go/<offer>`), your own deals and "Download with affiliate links" then use the Aff Alliances link for those stores whenever EarnKaro gives no commission link. Earnings are typed in on `/earnings.html` from the Aff Alliances dashboard (`server/affalliances.js`).
 
+### Commission links with INRDeals
+
+On publisher.inrdeals.com, use the Link Generator to make one link for each store you want (any page of the store is fine). Paste those links into `INRDEALS_LINKS`, separated by `;` or new lines, for example:
+
+```
+https://linkinr.com/?campaign_id=u0wYtw&inventory_id=mZnr6J&url=https%3A%2F%2Fwww.biba.in%2F
+```
+
+The store is read from the link's `url=` part (`<store domain>=<link>` also works). Any product page on that store then gets the same `campaign_id` and `inventory_id` with its own `url`. Buy, your own deals and "Download with affiliate links" use it after EarnKaro and Aff Alliances, before Cuelinks (`server/inrdeals.js`).
+
+INRDeals has publisher APIs (transactions, coupons, stores), but each needs API access requested first (profile menu, API Key, Request API Access). Until that is approved, INRDeals earnings are typed in on `/earnings.html`.
+
 ### Deals and coupons
 
 Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy full-access key works). The home page then shows a "Number of deals now" section (with the live count) with live offers from the Cuelinks Publisher API (`server/deals.js`), refreshed at most once an hour. The key stays on the server. To check the key and see what Cuelinks sends, use **Check Cuelinks deals** on the Add products page (it calls `/api/admin/deals/check`). Without the key, the section stays hidden.
