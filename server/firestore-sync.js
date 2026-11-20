@@ -20,6 +20,7 @@ const TABLES = [
   ['my_deals', ['id']],
   ['earnings_manual', ['network', 'month']],
   ['spin_players', ['phone']],
+  ['deal_clicks', ['deal', 'day']],
 ];
 
 const docId = (key, row) => key.length === 1 && Number.isInteger(row[key[0]])

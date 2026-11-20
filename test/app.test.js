@@ -343,7 +343,7 @@ test('Cuelinks deals: sent with the token, mapped, expired ones dropped, cached,
     assert.match(d.url, /^\/api\/go\/cuelinks\//);
     const r = await fetch(base + d.url, { redirect: 'manual' });
     assert.equal(r.status, 302);
-    assert.equal(r.headers.get('location'), 'https://linksredirect.com/?cid=335585&source=linkkit&url=' + encodeURIComponent('https://www.myntra.com/shoes?x=1&y=2'));
+    assert.equal(r.headers.get('location'), 'https://linksredirect.com/?cid=335585&source=linkkit&url=' + encodeURIComponent('https://www.myntra.com/shoes?x=1&y=2') + '&subid=deals-cuelinks-7');
     assert.equal((await fetch(`${base}/api/go/cuelinks/nope`, { redirect: 'manual' })).status, 404);
     // A Buy button for a store EarnKaro can't convert also gets the Cuelinks link.
     const buy = await fetch(`${base}/api/go/1`, { redirect: 'manual' });

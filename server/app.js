@@ -17,10 +17,13 @@ const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
 const { createPhoneAuth, createSpins } = require('./spin');
+const { createDealClicks, subidFor } = require('./deal-clicks');
 
 
 // Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
 const isAdmitadLink = u => { try { return /(^|\.)admitad\.com$/.test(new URL(u).hostname); } catch { return false; } };
+// Admitad tracking links take a subid, which comes back in Admitad's sub-ID report.
+const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(u); x.searchParams.set('subid', subid); return x.toString(); } catch { return u; } };
 
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
@@ -44,15 +47,16 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   // Cuelinks tracking link for a store page: linksredirect.com with the channel id (CUELINKS_CID).
   // Built on the server because the Cuelinks page script did not rewrite clicks on the live site.
   const cuelinksOn = /^\d{1,12}$/.test(cuelinksCid);
-  const cuelinksLink = url => `https://linksredirect.com/?cid=${cuelinksCid}&source=linkkit&url=${encodeURIComponent(url)}`;
+  // A sub ID (subid=deals-<id>) is added to deal links so the Cuelinks reports can show which deal earned.
+  const cuelinksLink = (url, subid) => `https://linksredirect.com/?cid=${cuelinksCid}&source=linkkit&url=${encodeURIComponent(url)}${subid ? `&subid=${encodeURIComponent(subid)}` : ''}`;
   const viaGo = earnkaro.connected || affalliances.connected || cuelinksOn;
-  async function commissionLink(url) {
-    if (isAdmitadLink(url)) return url;
+  async function commissionLink(url, subid = null) {
+    if (isAdmitadLink(url)) return withSubid(url, subid);
     const ek = await earnkaro.convert(url);
     if (ek && ek !== url) return ek;
     const aa = affalliances.convert(url);
     if (aa) return aa;
-    return cuelinksOn ? cuelinksLink(url) : url;
+    return cuelinksOn ? cuelinksLink(url, subid) : url;
   }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
   app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
@@ -242,19 +246,21 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
 
   // Deals and coupons: the owner's own (added on /products.html), Admitad (ADMITAD_* keys) and Cuelinks (CUELINKS_API_KEY).
-  // Expired own deals are hidden. With EarnKaro or Aff Alliances on, their links go through /api/go/deal/<id>.
+  // Expired own deals are hidden. Every deal link goes through our server (/api/go/deal|admitad|cuelinks/<id>),
+  // which counts the click (deal-clicks.js) and sends the shopper on with the commission link.
   const today = () => new Date().toISOString().slice(0, 10);
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
-    image: d.image || null, url: viaGo ? `/api/go/deal/${d.id}` : d.url, endsAt: d.ends_at || null, own: true });
-  // Cuelinks deals go through /api/go/cuelinks/<id>, which sends the shopper on with the Cuelinks tracking link.
-  const cuelinksDeal = d => (cuelinksOn ? { ...d, url: `/api/go/cuelinks/${encodeURIComponent(d.id)}` } : d);
+    image: d.image || null, url: `/api/go/deal/${d.id}`, endsAt: d.ends_at || null, own: true });
+  const admitadDeal = d => ({ ...d, url: `/api/go/admitad/${encodeURIComponent(String(d.id).replace(/^admitad-/, ''))}` });
+  const cuelinksDeal = d => ({ ...d, url: `/api/go/cuelinks/${encodeURIComponent(d.id)}` });
   // Order: the owner's own deals, then Admitad, then Cuelinks.
   async function allDeals() {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals, ...r.deals.map(cuelinksDeal)] };
+    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals.map(admitadDeal), ...r.deals.map(cuelinksDeal)] };
   }
+  const dealClicks = createDealClicks(db, { onClick: onChange });
   app.get('/api/deals', async (_req, res) => res.json(await allDeals()));
 
   // Spin to win (see spin.js). The page asks /api/spin/config whether it is switched on, the shopper
@@ -280,15 +286,45 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   });
   app.get('/api/admin/spin-players', requireAdmin, (_req, res) => res.json(spins.list()));
   app.get('/api/admin/admitad/check', requireAdmin, async (_req, res) => res.json(await admitad.check()));
+  const gone = res => res.status(404).type('text/plain').send('This deal is no longer available.');
   app.get('/api/go/deal/:id', async (req, res) => {
-    const d = db.prepare('SELECT url FROM my_deals WHERE id = ?').get(Number(req.params.id));
-    if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(d.url));
+    const d = db.prepare('SELECT id, title, store, url FROM my_deals WHERE id = ?').get(Number(req.params.id));
+    if (!d) return gone(res);
+    const deal = `my-${d.id}`;
+    dealClicks.record(req, { deal, title: d.title, store: d.store });
+    res.set('Cache-Control', 'no-store').redirect(302, await commissionLink(d.url, subidFor(deal)));
+  });
+  app.get('/api/go/admitad/:id', async (req, res) => {
+    const deal = `admitad-${req.params.id}`;
+    const d = (await admitad.list()).deals.find(x => x.id === deal);
+    if (!d) return gone(res);
+    dealClicks.record(req, { deal, title: d.title, store: d.store });
+    res.set('Cache-Control', 'no-store').redirect(302, withSubid(d.url, subidFor(deal)));
   });
   app.get('/api/go/cuelinks/:id', async (req, res) => {
-    const d = cuelinksOn && (await deals.list()).deals.find(x => x.id === req.params.id);
-    if (!d) return res.status(404).type('text/plain').send('This deal is no longer available.');
-    res.set('Cache-Control', 'no-store').redirect(302, cuelinksLink(d.url));
+    const d = (await deals.list()).deals.find(x => x.id === req.params.id);
+    if (!d) return gone(res);
+    const deal = `cuelinks-${d.id}`;
+    dealClicks.record(req, { deal, title: d.title, store: d.store });
+    res.set('Cache-Control', 'no-store').redirect(302, cuelinksOn ? cuelinksLink(d.url, subidFor(deal)) : d.url);
+  });
+  // Owner only: clicks on Super Saver Deals, and what each deal earned where a network reports sub IDs.
+  app.get('/api/admin/deal-stats', requireAdmin, async (req, res) => {
+    const refresh = req.query.refresh === '1';
+    const [{ deals: live }, sub] = await Promise.all([allDeals(), admitad.subidEarnings ? admitad.subidEarnings({ refresh }) : { connected: false, bySubid: {} }]);
+    const earned = Object.fromEntries(Object.entries(sub.bySubid || {}).filter(([k]) => k.startsWith('deals-')));
+    // Clicks are kept as my-<id>, admitad-<id> and cuelinks-<id>; Cuelinks deal ids come without a prefix.
+    const keyed = live.map(d => (d.url.startsWith('/api/go/cuelinks/') ? { ...d, id: `cuelinks-${d.id}` } : d));
+    const r = dealClicks.report({ days: req.query.days, live: keyed, earned });
+    const sumBy = (key, cur) => Object.values(earned).filter(e => e.currency === cur).reduce((a, e) => a + e[key], 0);
+    res.json({ ...r,
+      earnings: {
+        admitad: { connected: !!sub.connected, error: sub.error || null, currency: 'INR',
+          pending: Math.round(sumBy('pending', 'INR') * 100) / 100, confirmed: Math.round(sumBy('confirmed', 'INR') * 100) / 100,
+          deals: Object.keys(earned).length },
+        cuelinks: { connected: cuelinksOn },
+        earnkaro: { connected: !!earnkaro.connected },
+      } });
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
   const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');

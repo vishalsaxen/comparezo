@@ -287,6 +287,17 @@ html.gated, html.gated body{overflow:hidden}
   .earn-name > .earn-tags{flex-basis:100%}
 }
 .nowrap{white-space:nowrap}
+/* Super Saver Deals clicks, on the Earnings page */
+.deal-stats{margin-bottom:28px; display:flex; flex-direction:column; gap:16px}
+.deal-stats-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap}
+.deal-stats-head .sub{margin:4px 0 0}
+.deal-chart{display:flex; align-items:flex-end; gap:2px; height:96px; padding-top:4px; border-bottom:1px solid var(--line)}
+.deal-chart span{flex:1; min-width:1px; background:var(--brand); border-radius:3px 3px 0 0; min-height:1px; opacity:.9}
+.deal-chart span.zero{background:var(--line)}
+.deal-chart span:hover{opacity:1; background:var(--marigold)}
+.deal-table td:first-child{color:inherit; width:auto}
+.deal-table .t{font-weight:600}
+.deal-table .gone{color:var(--muted); font-weight:500}
 
 /* "Find in stores" on /products.html */
 .find{padding:20px; display:flex; flex-direction:column; gap:14px}
