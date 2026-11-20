@@ -13,6 +13,7 @@ const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
 const { createAffAlliances } = require('./affalliances');
+const { createInrDeals } = require('./inrdeals');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
@@ -28,7 +29,7 @@ const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -43,19 +44,22 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     next();
   });
   // A store link -> the link that earns commission: Admitad links as they are, then EarnKaro,
-  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, then Cuelinks, else the plain link.
+  // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, then an INRDeals link for stores
+  // set in INRDEALS_LINKS, then Cuelinks, else the plain link.
   // Cuelinks tracking link for a store page: linksredirect.com with the channel id (CUELINKS_CID).
   // Built on the server because the Cuelinks page script did not rewrite clicks on the live site.
   const cuelinksOn = /^\d{1,12}$/.test(cuelinksCid);
   // A sub ID (subid=deals-<id>) is added to deal links so the Cuelinks reports can show which deal earned.
   const cuelinksLink = (url, subid) => `https://linksredirect.com/?cid=${cuelinksCid}&source=linkkit&url=${encodeURIComponent(url)}${subid ? `&subid=${encodeURIComponent(subid)}` : ''}`;
-  const viaGo = earnkaro.connected || affalliances.connected || cuelinksOn;
+  const viaGo = earnkaro.connected || affalliances.connected || inrdeals.connected || cuelinksOn;
   async function commissionLink(url, subid = null) {
     if (isAdmitadLink(url)) return withSubid(url, subid);
     const ek = await earnkaro.convert(url);
     if (ek && ek !== url) return ek;
     const aa = affalliances.convert(url);
     if (aa) return aa;
+    const inr = inrdeals.convert(url);
+    if (inr) return inr;
     return cuelinksOn ? cuelinksLink(url, subid) : url;
   }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
@@ -200,16 +204,18 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
       }
       const aa = affalliances.convert(url);
       if (aa) return { url, link: aa, via: 'Aff Alliances' };
+      const inr = inrdeals.convert(url);
+      if (inr) return { url, link: inr, via: 'INRDeals' };
       if (admitad.connected && admitad.deeplink) {
         const r = await admitad.deeplink(url);
         if (r.link) return { url, link: r.link, via: 'Admitad' };
         return { url, link: null, via: null, note: (earnkaro.connected ? 'EarnKaro could not convert it. ' : '') + `Admitad: ${r.error}` };
       }
-      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY, AFFALLIANCES_LINKS or the ADMITAD_* keys on the server.' };
+      return { url, link: null, via: null, note: earnkaro.connected ? 'EarnKaro could not convert it.' : 'Set EARNKARO_API_KEY, AFFALLIANCES_LINKS, INRDEALS_LINKS or the ADMITAD_* keys on the server.' };
     };
     const results = [];
     for (let i = 0; i < urls.length; i += 5) results.push(...await Promise.all(urls.slice(i, i + 5).map(one)));
-    res.json({ earnkaro: earnkaro.connected, affalliances: affalliances.connected, admitad: !!admitad.connected, results });
+    res.json({ earnkaro: earnkaro.connected, affalliances: affalliances.connected, inrdeals: inrdeals.connected, admitad: !!admitad.connected, results });
   });
   // "Find in stores": search every connected store's official API or product feed by name.
   if (!storeSearch) {
@@ -385,7 +391,7 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   app.post('/api/admin/deals/refresh', requireAdmin, async (_req, res) => res.json(await deals.list({ refresh: true })));
 
   // Earnings page: money earned per affiliate network (see earnings.js). Owner only.
-  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected, affalliances: !!affalliances.connected } });
+  const earnings = createEarnings(db, { sources: { admitad, cuelinks: deals, partnerize }, connected: { earnkaro: !!earnkaro.connected, affalliances: !!affalliances.connected, inrdeals: !!inrdeals.connected } });
   app.get('/api/admin/earnings', requireAdmin, async (req, res) => res.json(await earnings.report({ refresh: req.query.refresh === '1' })));
   app.post('/api/admin/earnings', requireAdmin, (req, res) => {
     const r = earnings.save(req.body);

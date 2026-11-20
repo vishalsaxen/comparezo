@@ -28,13 +28,13 @@ const SAMPLE = [
   { name: 'Bedsheet', category: 'Home', offers: [offer('Amazon.in', 549)] },
 ];
 
-async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances, cuelinksCid = '' } = {}) {
+async function withServer(fn, { adminKey = '', deals, earnkaro, admitad, affalliances, inrdeals, cuelinksCid = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
   const db = openDb(':memory:');
   seed(db);
   // A few products, added the way the admin page adds them.
   for (const p of SAMPLE) assert.ok(addProduct(db, p, 'manual').id);
-  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, cuelinksCid, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}) }).listen(0);
+  const server = createApp(db, { uploadsDir: path.join(dir, 'uploads'), adminKey, cuelinksCid, ...(deals ? { deals } : {}), ...(earnkaro ? { earnkaro } : {}), ...(admitad ? { admitad } : {}), ...(affalliances ? { affalliances } : {}), ...(inrdeals ? { inrdeals } : {}) }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try { await fn(base); } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -475,6 +475,28 @@ test('Aff Alliances: tracking links from AFFALLIANCES_LINKS are used on Buy afte
     assert.equal(row.connected, true);
     assert.equal(row.auto, false);
   }, { adminKey: 'k', affalliances: aa });
+});
+
+const inr = require('../server/inrdeals');
+test('INRDeals: an example linkinr.com link per store is reused for any page on that store', async () => {
+  const sample = 'https://linkinr.com/?campaign_id=u0wYtw&inventory_id=mZnr6J&url=https%3A%2F%2Fwww.biba.in%2F';
+  assert.deepEqual(inr.parseLinks(`${sample}\nbad; https://evil.example/?campaign_id=a1&inventory_id=b2&url=https%3A%2F%2Fx.com;amazonin.com=https://linkinr.com/?campaign_id=Ab12&inventory_id=mZnr6J&url=https%3A%2F%2Fwww.amazon.in%2F`).map(e => e.domain).sort(), ['amazonin.com', 'biba.in']);
+  const d = inr.createInrDeals({ links: `${sample};amazonin.com=https://linkinr.com/?campaign_id=Ab12&inventory_id=mZnr6J&url=https%3A%2F%2Fwww.amazon.in%2F` });
+  assert.equal(d.convert('https://shop.lenovo.com/x'), null);
+  assert.equal(d.convert('https://www.biba.in/kurta?a=1&b=2'), 'https://linkinr.com/?campaign_id=u0wYtw&inventory_id=mZnr6J&url=' + encodeURIComponent('https://www.biba.in/kurta?a=1&b=2'));
+
+  await withServer(async base => {
+    const found = await (await fetch(`${base}/api/products?q=earbuds`)).json();
+    const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
+    const amazon = detail.offers.find(o => o.store === 'Amazon.in');
+    assert.equal(amazon.buyUrl, `/api/go/${amazon.id}`);
+    const r = await fetch(`${base}/api/go/${amazon.id}`, { redirect: 'manual' });
+    assert.match(r.headers.get('location'), /^https:\/\/linkinr\.com\/\?campaign_id=Ab12&inventory_id=mZnr6J&url=https%3A%2F%2Fwww\.amazonin\.com/);
+    const e = await (await fetch(`${base}/api/admin/earnings`, { headers: { 'X-Admin-Key': 'k' } })).json();
+    const row = e.networks.find(n => n.id === 'inrdeals');
+    assert.equal(row.connected, true);
+    assert.equal(row.auto, false);
+  }, { adminKey: 'k', inrdeals: d });
 });
 
 test('admin can edit one field or the whole product, keeping store ids for Buy links', () => withServer(async base => {

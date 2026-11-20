@@ -30,6 +30,7 @@ function locked(msg) {
 function status(n) {
   if (n.id === 'extrape') return ['No API', 'muted'];
   if (n.id === 'earnkaro') return n.connected ? ['Links connected', 'good'] : ['Not connected', 'muted'];
+  if (n.id === 'inrdeals') return n.connected ? ['Links set, type it in', 'good'] : ['Type it in', 'muted'];
   if (n.id === 'affalliances') return n.connected ? ['Links set, no API', 'good'] : ['No API, type it in', 'muted'];
   if (!n.connected) return ['Not connected', 'muted'];
   return n.apiError ? ['Connected, report failed', 'warn'] : ['Connected', 'good'];
