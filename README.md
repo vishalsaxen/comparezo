@@ -107,7 +107,11 @@ Under **Upload products from Excel** on `/products.html`, upload an `.xlsx` or `
 
 ## Earning commission with Cuelinks
 
-Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). The page then loads `/affiliate.js`, which loads Cuelinks' script. When a shopper clicks "Buy on Flipkart", "Buy on Myntra" and so on, Cuelinks turns the link into a commission-earning link for any store you're approved for. Without `CUELINKS_CID`, `/affiliate.js` does nothing.
+Set `CUELINKS_CID` to the number from the Cuelinks JavaScript code (Dashboard → Installation → JavaScript). Buy buttons and deal links then go through `/api/go/…`, which sends the shopper to a `linksredirect.com` Cuelinks link built on the server, for stores no other network covers.
+
+Cuelinks' page script (`cuelinksv2.js`) is off by default, because it counted clicks on Comparezo's own links (`comparezo.onrender.com/api/go/…`) as unmonetized traffic. Set `CUELINKS_PAGE_SCRIPT=on` to load it again through `/affiliate.js`.
+
+Stores Cuelinks doesn't pay for never get a Cuelinks link: amazon.in, amazon.com, amzn.in, cashify.in and alonge.in by default (see `server/link-routing.js`). They go through EarnKaro, Aff Alliances, INRDeals or an Admitad deeplink, else the plain store link. Add more stores with `CUELINKS_SKIP`, for example `CUELINKS_SKIP=foo.in, bar.com`. Links that already are affiliate redirects (bit.ly, linksredirect.com, ypetp.com, ekaro.in and others) and Comparezo's own links are never wrapped again; add more redirect hosts with `AFFILIATE_REDIRECT_HOSTS`.
 
 ### Commission links with EarnKaro
 

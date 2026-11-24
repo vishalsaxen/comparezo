@@ -216,15 +216,17 @@ test('three levels: products pick a type when the sub-category has types, and ad
   assert.equal((await send('DELETE', `${base}/api/categories/${santoor.id}`, null, H)).status, 200);
 }, { adminKey: 'k' }));
 
-test('affiliate.js loads Cuelinks only when a numeric CUELINKS_CID is set', async () => {
+test('affiliate.js loads Cuelinks only when CUELINKS_PAGE_SCRIPT is on and a numeric CUELINKS_CID is set', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
-  const run = async cid => {
-    const server = createApp(openDb(':memory:'), { uploadsDir: path.join(dir, 'u'), cuelinksCid: cid }).listen(0);
+  const run = async (cid, cuelinksPageScript = true) => {
+    const server = createApp(openDb(':memory:'), { uploadsDir: path.join(dir, 'u'), cuelinksCid: cid, cuelinksPageScript }).listen(0);
     try { return await (await fetch(`http://127.0.0.1:${server.address().port}/affiliate.js`)).text(); } finally { server.close(); }
   };
   try {
     assert.match(await run('123456'), /var cId = '123456'[\s\S]*cdn0\.cuelinks\.com\/js\/cuelinksv2\.js/);
     assert.doesNotMatch(await run(''), /cuelinks/);
+    // Off by default: links are built on the server, and the script counted our own links as unmonetized.
+    assert.doesNotMatch(await run('123456', false), /cuelinks/);
     assert.doesNotMatch(await run("1';alert(1)//"), /alert/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -548,3 +550,40 @@ test('admin can edit a hand-added deal', () => withServer(async base => {
   r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ url: 'ftp://x' }) });
   assert.equal(r.status, 400);
 }, { adminKey: 'k' }));
+
+test('Stores Cuelinks does not pay for skip Cuelinks; own links and affiliate redirects are left alone', async () => {
+  const { createLinkRouting } = require('../server/link-routing');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cz-'));
+  const db = openDb(':memory:');
+  seed(db);
+  const urls = {
+    amazon: 'https://www.amazon.in/dp/B0TEST',
+    cashify: 'https://www.cashify.in/sell-phone',
+    alonge: 'https://alonge.in/products/x',
+    ajio: 'https://www.ajio.com/p/123',
+    bitly: 'https://bit.ly/3abcde',
+    own: 'https://comparezo.onrender.com/products.html',
+    extra: 'https://www.example-shop.in/p/1',
+  };
+  const id = addProduct(db, { name: 'Test item', category: 'Electronics', offers: Object.entries(urls).map(([k, url], i) => ({ store: `Store ${k}`, price: 100 + i, url })) }, 'manual').id;
+  assert.ok(id);
+  const offerOf = url => db.prepare('SELECT id FROM offers WHERE url = ?').get(url).id;
+  const sent = [];
+  // EarnKaro converts only Amazon here; Admitad has joined Alonge only.
+  const earnkaro = { connected: true, convert: async u => { sent.push(u); return u === urls.amazon ? 'https://ekaro.in/enkr2026/amz' : u; } };
+  const admitad = { connected: true, list: async () => ({ connected: true, deals: [] }), deeplink: async u => (u === urls.alonge ? { link: 'https://ad.admitad.com/g/abc/?ulp=x' } : { error: 'not joined' }) };
+  const linkRouting = createLinkRouting({ cuelinksSkip: 'example-shop.in' });
+  const server = createApp(db, { uploadsDir: path.join(dir, 'u'), cuelinksCid: '335585', earnkaro, admitad, linkRouting }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const go = async url => (await fetch(`${base}/api/go/${offerOf(url)}`, { redirect: 'manual' })).headers.get('location');
+  try {
+    assert.equal(await go(urls.amazon), 'https://ekaro.in/enkr2026/amz');                 // EarnKaro
+    assert.equal(await go(urls.cashify), urls.cashify);                                    // nobody pays: plain link, not Cuelinks
+    assert.match(await go(urls.alonge), /^https:\/\/ad\.admitad\.com\/g\/abc\//);         // Admitad deeplink
+    assert.equal(await go(urls.extra), urls.extra);                                        // CUELINKS_SKIP adds stores
+    assert.match(await go(urls.ajio), /^https:\/\/linksredirect\.com\/\?cid=335585&/);   // Cuelinks still used where it pays
+    assert.equal(await go(urls.bitly), urls.bitly);                                        // already an affiliate redirect
+    assert.equal(await go(urls.own), urls.own);                                            // our own site
+    assert.ok(!sent.includes(urls.bitly) && !sent.includes(urls.own), 'redirects and own links are not sent to EarnKaro');
+  } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
