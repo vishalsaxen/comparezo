@@ -8,6 +8,7 @@ const { createAdmitad } = require('./admitad');
 const { createPartnerize } = require('./partnerize');
 const { createAffAlliances } = require('./affalliances');
 const { createInrDeals } = require('./inrdeals');
+const { createLinkRouting } = require('./link-routing');
 const { loadCatalog } = require('./catalog');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
@@ -73,6 +74,8 @@ async function main() {
     partnerize: createPartnerize({ appKey: (process.env.PARTNERIZE_APP_KEY || '').trim(), apiKey: (process.env.PARTNERIZE_API_KEY || '').trim(), publisherId: (process.env.PARTNERIZE_PUBLISHER_ID || '').trim() }),
     affalliances: createAffAlliances({ links: process.env.AFFALLIANCES_LINKS || '' }),
     inrdeals: createInrDeals({ links: process.env.INRDEALS_LINKS || '' }),
+    linkRouting: createLinkRouting({ cuelinksSkip: process.env.CUELINKS_SKIP || '', redirectHosts: process.env.AFFILIATE_REDIRECT_HOSTS || '' }),
+    cuelinksPageScript: /^(on|1|true|yes)$/i.test((process.env.CUELINKS_PAGE_SCRIPT || '').trim()),
     deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
     phoneAuth: phoneAuthFromEnv(process.env),
     firebaseWebConfig: webConfigFromEnv(process.env),

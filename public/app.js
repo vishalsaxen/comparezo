@@ -194,7 +194,7 @@ async function loadNewArrivals() {
   $('newGrid').innerHTML = data.items.map(p => {
     const c = catStyle(p.category);
     const img = p.image ? `<div class="img" style="background-image:url('${esc(p.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : `<div class="img" style="background:${c.c}"><svg viewBox="0 0 24 24" aria-hidden="true">${c.i}</svg></div>`;
-    const link = p.url ? `<a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener sponsored">View on ${esc(p.store)}</a>` : '';
+    const link = p.url ? `<a class="btn" href="${esc((p.url.startsWith('/api/') ? (window.CZ_API || '') : '') + p.url)}" target="_blank" rel="noopener sponsored">View on ${esc(p.store)}</a>` : '';
     return `<article class="lcard">${img}<div class="body"><div class="price num">${inr(p.price)}</div><div class="t">${esc(p.name)}</div><div class="sub">${sdot(p.store)}${esc(p.store)} · ${ago(p.arrived_at)}</div><div class="row"><span class="sub">${esc(catLabel(p.category, p.sub_category))}</span>${link}</div></div></article>`;
   }).join('');
   // Only show the section once a store feed is connected and has something new.

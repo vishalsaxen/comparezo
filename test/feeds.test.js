@@ -118,5 +118,12 @@ test('API: new arrivals, feed status, and running feeds needs the admin key', as
     const found = await (await fetch(`${base}/api/products?q=Nimbus X`)).json();
     const detail = await (await fetch(`${base}/api/products/${found[0].id}`)).json();
     assert.match(detail.offers[0].buyUrl, /^https:\/\/dl\.flipkart\.com/);
+    assert.match(na.items[0].url, /^https:\/\//);   // no affiliate network: the store link itself
   } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  // With an affiliate network on, "View on store" goes through /api/go like Buy does.
+  const server2 = createApp(db, { uploadsDir: path.join(dir, 'u2'), feedRunner, cuelinksCid: '335585' }).listen(0);
+  try {
+    const na = await (await fetch(`http://127.0.0.1:${server2.address().port}/api/new-arrivals?days=20&category=Mobiles`)).json();
+    assert.match(na.items[0].url, /^\/api\/go\/\d+$/);
+  } finally { server2.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

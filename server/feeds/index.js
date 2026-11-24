@@ -99,7 +99,7 @@ function createFeedRunner(db, { feeds = [], missing = {} } = {}) {
 function newArrivals(db, { days = 20, store = null, category = null, limit = 60, now = new Date() } = {}) {
   const d = Math.min(Math.max(parseInt(days, 10) || 20, 1), 90);
   const since = new Date(now.getTime() - d * 86400_000).toISOString().replace('T', ' ').slice(0, 19);
-  let sql = `SELECT p.*, COALESCE(p.listed_at, p.first_seen_at) AS arrived_at, o.price, o.mrp, o.url, o.store
+  let sql = `SELECT p.*, COALESCE(p.listed_at, p.first_seen_at) AS arrived_at, o.id AS offer_id, o.price, o.mrp, o.url, o.store
     FROM products p JOIN offers o ON o.product_id = p.id AND o.external_id IS NOT NULL
     WHERE p.first_seen_at IS NOT NULL AND COALESCE(p.listed_at, p.first_seen_at) >= ?`;
   const args = [since];

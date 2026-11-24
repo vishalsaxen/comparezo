@@ -19,6 +19,7 @@ const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
 const { createPhoneAuth, createSpins } = require('./spin');
 const { createDealClicks, subidFor } = require('./deal-clicks');
+const { createLinkRouting } = require('./link-routing');
 
 
 // Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
@@ -29,7 +30,7 @@ const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), cuelinksPageScript = false, storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -46,6 +47,9 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   // A store link -> the link that earns commission: Admitad links as they are, then EarnKaro,
   // then an Aff Alliances tracking link for stores set in AFFALLIANCES_LINKS, then an INRDeals link for stores
   // set in INRDEALS_LINKS, then Cuelinks, else the plain link.
+  // Stores Cuelinks doesn't pay for (Amazon, Cashify, Alonge; see link-routing.js) never get a Cuelinks
+  // link: after EarnKaro, Aff Alliances and INRDeals they try an Admitad deeplink, else the plain link.
+  // Comparezo's own links and links that already are affiliate redirects (bit.ly, linksredirect…) are kept as they are.
   // Cuelinks tracking link for a store page: linksredirect.com with the channel id (CUELINKS_CID).
   // Built on the server because the Cuelinks page script did not rewrite clicks on the live site.
   const cuelinksOn = /^\d{1,12}$/.test(cuelinksCid);
@@ -54,13 +58,19 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   const viaGo = earnkaro.connected || affalliances.connected || inrdeals.connected || cuelinksOn;
   async function commissionLink(url, subid = null) {
     if (isAdmitadLink(url)) return withSubid(url, subid);
+    if (linkRouting.isOwnSite(url) || linkRouting.isRedirect(url)) return url;
     const ek = await earnkaro.convert(url);
     if (ek && ek !== url) return ek;
     const aa = affalliances.convert(url);
     if (aa) return aa;
     const inr = inrdeals.convert(url);
     if (inr) return inr;
-    return cuelinksOn ? cuelinksLink(url, subid) : url;
+    if (linkRouting.cuelinksPays(url)) return cuelinksOn ? cuelinksLink(url, subid) : url;
+    if (admitad.connected && admitad.deeplink) {
+      const r = await admitad.deeplink(url).catch(() => ({}));
+      if (r && r.link) return withSubid(r.link, subid);
+    }
+    return url;
   }
   // Buy clicks are sent as text/plain so the browser needs no CORS preflight; the body is still JSON.
   app.use(express.json({ limit: '5mb', type: ['application/json', 'text/plain'] }));
@@ -69,11 +79,14 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     if (req.method !== 'GET' && req.method !== 'HEAD') res.on('finish', () => { if (res.statusCode < 400) onChange(); });
     next();
   });
-  // Cuelinks turns ordinary store links into commission-earning links when a shopper clicks them.
-  // Set CUELINKS_CID (the number in the JavaScript code from the Cuelinks dashboard) to turn it on.
+  // The Cuelinks page script (cuelinksv2.js) is off by default. Every Buy and deal link already goes through
+  // /api/go, which builds the Cuelinks link on the server, so the script added nothing. It did count clicks
+  // on our own links (comparezo.onrender.com/api/go/…) and on Amazon as "unmonetized traffic" in Cuelinks.
+  // Set CUELINKS_PAGE_SCRIPT=on (with CUELINKS_CID) to load it again.
   app.get('/affiliate.js', (_req, res) => {
     res.type('application/javascript').set('Cache-Control', 'public, max-age=300');
     if (!/^\d{1,12}$/.test(cuelinksCid)) return res.send('// No affiliate network is set up.\n');
+    if (!cuelinksPageScript) return res.send('// Affiliate links are built on the server (/api/go), so no page script is needed.\n');
     res.send(`var cId = '${cuelinksCid}';
 (function () {
   var s = document.createElement('script');
@@ -246,7 +259,10 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   // Products that store feeds first showed us in the last N days (default 20).
   app.get('/api/new-arrivals', (req, res) => {
     const category = cats.findTop(db, req.query.category) ? req.query.category : null;
-    res.json(feeds.newArrivals(db, { days: req.query.days, store: req.query.store || null, category }));
+    const r = feeds.newArrivals(db, { days: req.query.days, store: req.query.store || null, category });
+    // Like Buy, "View on store" goes through /api/go so the shopper gets the commission link.
+    if (viaGo) r.items.forEach(p => { if (p.url && p.offer_id) p.url = `/api/go/${p.offer_id}`; });
+    res.json(r);
   });
   app.get('/api/feeds', (_req, res) => res.json(feedRunner.status()));
   app.post('/api/admin/feeds/run', requireAdmin, async (_req, res) => res.json(await feedRunner.runAll()));
