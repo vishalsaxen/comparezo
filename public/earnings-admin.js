@@ -11,7 +11,7 @@ const keyStore = {
   set(v) { try { localStorage.setItem('cz-admin-key', v); } catch { /* private mode */ } },
   clear() { try { localStorage.removeItem('cz-admin-key'); } catch { /* private mode */ } },
 };
-let key = keyStore.get(), report = null, dealDays = 30;
+let key = keyStore.get(), report = null, dealDays = 30, dealStats = null, dealNewestFirst = true;
 
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200); }
@@ -92,7 +92,14 @@ function render() {
 // Super Saver Deals: clicks per deal, and what each deal earned where the network reports sub IDs.
 const dayName = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const when = iso => iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—';
+// Deals sorted by last click: newest first by default, deals never clicked at the bottom.
+const byLastClick = (a, b) => {
+  const ta = a.lastAt ? Date.parse(a.lastAt) : NaN, tb = b.lastAt ? Date.parse(b.lastAt) : NaN;
+  if (isNaN(ta) || isNaN(tb)) return isNaN(ta) - isNaN(tb);
+  return dealNewestFirst ? tb - ta : ta - tb;
+};
 function renderDeals(s) {
+  dealStats = s;
   const e = s.earnings, ad = e.admitad;
   const earned = ad.connected && !ad.error ? fmt(ad.pending + ad.confirmed) : '—';
   $('dealKpis').innerHTML = [
@@ -105,7 +112,7 @@ function renderDeals(s) {
   $('dealChart').setAttribute('aria-label', `Deal clicks per day, ${dayName(s.from)} to ${dayName(s.to)}: ${s.perDay.reduce((a, d) => a + d.clicks, 0)} in total`);
   $('dealRangeHead').textContent = `Last ${s.days} days`;
 
-  $('dealRows').innerHTML = s.deals.length ? s.deals.map(d => `<tr>
+  $('dealRows').innerHTML = s.deals.length ? [...s.deals].sort(byLastClick).map(d => `<tr>
       <td><div class="t${d.live ? '' : ' gone'}">${esc(d.title)}</div><div class="sub">${esc(d.store)}${d.live ? '' : (d.store ? ' · ' : '') + 'no longer listed'}</div></td>
       <td class="nowrap">${esc(d.network)}</td>
       <td class="r num">${d.clicks.toLocaleString('en-IN')}</td>
@@ -126,6 +133,13 @@ async function loadDeals(refresh = false) {
   try { renderDeals(await call('GET', `/api/admin/deal-stats?days=${dealDays}` + (refresh ? '&refresh=1' : ''))); }
   catch (e) { if (e.status !== 401 && e.status !== 403) $('dealNote').textContent = 'Could not load deal clicks: ' + e.message; }
 }
+$('dealSort').addEventListener('click', () => {
+  dealNewestFirst = !dealNewestFirst;
+  $('dealSortHead').setAttribute('aria-sort', dealNewestFirst ? 'descending' : 'ascending');
+  $('dealSort').title = dealNewestFirst ? 'Newest first. Click for oldest first.' : 'Oldest first. Click for newest first.';
+  $('dealSort').querySelector('span').textContent = dealNewestFirst ? '↓' : '↑';
+  if (dealStats) renderDeals(dealStats);
+});
 $('dealRange').addEventListener('click', ev => {
   const b = ev.target.closest('[data-days]');
   if (!b) return;

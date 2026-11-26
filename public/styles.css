@@ -89,6 +89,9 @@ button,input,select,textarea{font:inherit; color:inherit}
 .tablebox{overflow-x:auto}
 .offers{width:100%; border-collapse:separate; border-spacing:0 6px; min-width:680px; padding:0 8px}
 th{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; text-align:left; padding:6px 12px}
+.th-sort{all:unset; cursor:pointer; font:inherit; color:inherit; letter-spacing:inherit; text-transform:inherit; white-space:nowrap}
+.th-sort:hover{color:var(--ink)}
+.th-sort:focus-visible{outline:2px solid currentColor; outline-offset:2px; border-radius:4px}
 .r{text-align:right}
 .offers td{padding:12px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--surface); vertical-align:middle}
 .offers td:first-child{border-left:1px solid var(--line); border-radius:8px 0 0 8px}
