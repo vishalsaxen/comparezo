@@ -53,10 +53,10 @@ document.querySelectorAll('a[data-open]').forEach(a => {
 });
 /* ---------- Tabs ---------- */
 let linezoLoaded = false;
-// Everyone sees Comparezo and Super Saver Deals. Seller Catalog, Linezo and Earnings are only for
+// Everyone sees Comparezo, Super Saver Deals and Seller Catalog. Linezo and Earnings are only for
 // the owner: those tabs show only in a browser that has the admin key.
 const TABS = { compare: 'Comparezo', deals: 'Super Saver Deals', seller: 'Seller Catalog', linezo: 'Linezo' };
-const OWNER_TABS = ['seller', 'linezo'];
+const OWNER_TABS = ['linezo'];
 function route() {
   const owner = !!adminKey();
   document.querySelectorAll('#tabs [data-owner]').forEach(a => { a.hidden = !owner; });
@@ -331,7 +331,7 @@ async function loadDeals() {
   if (location.hash.startsWith('#deals')) offerSpin();
 }
 
-/* ---------- Seller Catalog: live products from the GiaZoNest shop (owner only for now) ---------- */
+/* ---------- Seller Catalog: live products from the GiaZoNest shop (public; Sync now is owner only) ---------- */
 let sellerLoaded = false, catalog = { items: [] };
 const scState = { q: '', sort: 'new' };
 async function loadSeller(refresh = false) {
@@ -370,8 +370,8 @@ function renderSeller() {
   $('scSync').innerHTML = (catalog.syncedAt ? `<span class="live">Synced ${esc(agoMin(catalog.syncedAt))}</span>` : '')
     + `<span><b class="num">${items.length}</b> live product${items.length === 1 ? '' : 's'}</span><span><b class="num">${sellers.size}</b> seller${sellers.size === 1 ? '' : 's'}</span>`
     + (cities.size ? `<span><b class="num">${cities.size}</b> cit${cities.size === 1 ? 'y' : 'ies'}</span>` : '')
-    + `<button type="button" class="btn btn-ghost small" id="scRefresh">${CzCat.icon('sync')} Sync now</button>`
-    + (catalog.error ? `<span class="err">GiaZoNest could not be read: ${esc(catalog.error)}</span>` : '');
+    + (adminKey() ? `<button type="button" class="btn btn-ghost small" id="scRefresh">${CzCat.icon('sync')} Sync now</button>` : '')
+    + (catalog.error ? `<span class="err">${adminKey() ? `GiaZoNest could not be read: ${esc(catalog.error)}` : 'Some products may be out of date. Please check back soon.'}</span>` : '');
   $('scMenu').innerHTML = sellerMenu();
   if (sheetKind === 'seller') renderSheet();
   let list = items;

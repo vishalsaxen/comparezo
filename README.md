@@ -5,6 +5,7 @@ Comparezo helps shoppers in India find the cheapest place to buy. One search sho
 The app has two tabs:
 
 - **Comparezo**: search, compare prices, buy where it's cheapest, and sell your own product.
+- **Seller Catalog**: public tab with live products from local sellers on the GiaZoNest shop (read-only, refreshed every 30 minutes; only the seller name and city are shown, never contact details). "Sync now" shows only with the admin key.
 - **Linezo**: the owner's sales tracker. It is private: the tab only shows in a browser that has the admin key (entered on the Add products page), and `GET /api/trends` needs the `X-Admin-Key` header. It counts every "Buy" click: clicks per day with a 7-day average, the value of the clicked items, which stores and categories get the clicks, and the most clicked products. Confirmed orders and commission are in the Cuelinks dashboard. You can filter by 7, 30 or 90 days and by category.
 
 ## Run it
