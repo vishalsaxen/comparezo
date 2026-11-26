@@ -715,9 +715,19 @@ $('findForm').addEventListener('submit', async e => {
   finally { $('findBtn').disabled = false; $('findBtn').textContent = 'Search stores'; }
 });
 
+// "What Google Shopping found": every listing that was left out, and why.
+function detailsHtml(d) {
+  if (!d || !((d.leftOut || []).length || (d.noLink || []).length)) return '';
+  const row = x => `<li>${esc(x.store)}: ${esc(x.title)}${x.price ? ` (${inr(x.price)})` : ''}${x.reason ? ` <span class="sub">— ${esc(x.reason)}</span>` : ''}</li>`;
+  return `<details style="margin-top:4px"><summary class="sub" style="cursor:pointer">Show what was left out (${(d.leftOut || []).length + (d.noLink || []).length})</summary>
+    ${(d.leftOut || []).length ? `<div class="sub" style="margin-top:6px">Not the same product</div><ul class="src-list">${d.leftOut.map(row).join('')}</ul>` : ''}
+    ${(d.noLink || []).length ? `<div class="sub" style="margin-top:6px">Same product, but Google gave no store link</div><ul class="src-list">${d.noLink.map(row).join('')}</ul>` : ''}
+  </details>`;
+}
+
 function renderSources(r) {
   const searched = (r.sources || []).map(s => `<li><strong>${esc(s.name)}</strong>: ${s.ok
-    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}`
+    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}${detailsHtml(s.details)}`
     : `<span class="err">${esc(s.error)}</span>`}</li>`);
   const off = Object.entries(r.notConnected || {}).map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`);
   $('findSources').hidden = !searched.length && !off.length;

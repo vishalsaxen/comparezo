@@ -77,6 +77,9 @@ test('SerpApi source: exact product, store links, few searches, cached', async (
   assert.equal(r.results[3].url, 'https://www.jiomart.com/search/Google%20Pixel%2011%20128GB');
   assert.match(r.note, /1 link opens the store's search/);
   assert.match(r.note, /Skipped 1 listing/);
+  assert.deepEqual(r.details.leftOut.map(x => x.reason), ['different model (pro)', 'accessory or not new']);
+  assert.deepEqual(r.details.noLink.map(x => x.store), ['Some Shop']);
+  assert.equal(r.details.found, 8);
   assert.equal(r.results[0].url, 'https://www.flipkart.com/google-pixel-11/p/itm1');
   assert.equal(r.results[0].mrp, 79999);
   assert.equal(r.results[0].image, 'https://encrypted-tbn0.gstatic.com/a.jpg');
