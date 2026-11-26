@@ -35,7 +35,7 @@
     <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
       <a role="tab" id="tab-compare" href="#compare" aria-controls="view-compare">Comparezo</a>
       <a role="tab" id="tab-deals" href="#deals" aria-controls="view-deals">Super Saver Deals</a>
-      <a role="tab" id="tab-seller" href="#seller" aria-controls="view-seller" data-owner hidden>Seller Catalog</a>
+      <a role="tab" id="tab-seller" href="#seller" aria-controls="view-seller">Seller Catalog</a>
       <a role="tab" id="tab-linezo" href="#linezo" aria-controls="view-linezo" data-owner hidden>Linezo</a>
       <a href="/earnings.html" data-owner hidden>Earnings</a>
       <a href="/spin-players.html" data-owner hidden>Spin players</a>
@@ -98,12 +98,12 @@
     </section>
   </div>
 
-  <!-- Seller Catalog tab: owner only for now. Live products from the GiaZoNest shop, read-only (server/giazonest.js). -->
+  <!-- Seller Catalog tab: public. Live products from the GiaZoNest shop, read-only (server/giazonest.js). -->
   <div id="view-seller" role="tabpanel" aria-labelledby="tab-seller" hidden>
     <section class="hero wrap deals-hero">
-      <div class="eyebrow">Seller Catalog · only you see this tab</div>
+      <div class="eyebrow">Seller Catalog · shop local</div>
       <h1>Local sellers from <em>GiaZoNest</em></h1>
-      <p class="lede">Live, approved products from KYC-verified sellers on your GiaZoNest shop. Comparezo reads them from GiaZoNest, so a seller's new product, price or stock change shows here on the next sync (every 30 minutes).</p>
+      <p class="lede">Live, approved products from KYC-verified local sellers on the GiaZoNest shop. Prices and stock refresh every 30 minutes. Tap a product to see it and buy it on GiaZoNest.</p>
       <div class="sync-row" id="scSync"></div>
     </section>
     <section class="community wrap browse">
@@ -161,6 +161,6 @@
 <div class="cm-sheet" id="catSheet" hidden><div class="cm-sheet-panel" id="catSheetPanel"></div></div>
 <script src="/cat-icons.js?v=2026-11-26a"></script>
 <script src="/spin.js?v=2026-11-15d"></script>
-<script src="/app.js?v=2026-11-26a"></script>
+<script src="/app.js?v=2026-11-26b"></script>
 </body>
 </html>
