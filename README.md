@@ -102,6 +102,19 @@ Step 3 runs only when needed: for matches from stores that have no store link an
 
 The same variant check runs on every source: a listing with all the search words but another model or size shows as "Different model (pro)" or "Different size (256gb)" instead of "Same product", so it isn't ticked automatically.
 
+### Bright Data as the backup
+
+If SerpApi fails, for example because the month's searches are used up, the key is wrong or it's down, Find in stores automatically uses [Bright Data](https://brightdata.com)'s SERP API instead (`server/brightdata.js`). Bright Data's free plan has 5,000 requests a month, and each search is one request. The Google Shopping line in **Searched** says which one answered ("Through Bright Data (SerpApi failed: ...)").
+
+To turn it on, set both of these on Render:
+
+- `BRIGHTDATA_API_KEY`: from Account settings → API keys.
+- `BRIGHTDATA_ZONE`: the name of your SERP API zone, from Proxies & Scraping → SERP API.
+
+`SHOPPING_ORDER` sets which provider is tried first (default `serpapi,brightdata`). Use `brightdata,serpapi` to save your SerpApi searches.
+
+Bright Data has no store lookup like SerpApi's. A listing with the store's own link uses it. A store listed in `server/stores.js` opens that store's search for the product. Other stores are skipped.
+
 Tick the listings, review, and add. The product then shows on the Comparezo tab (`#compare`) with each store's price, like any other product. Prices are saved when you add the product. To update them later, search again and edit the product.
 
 ## Adding products by hand

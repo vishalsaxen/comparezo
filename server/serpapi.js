@@ -178,4 +178,4 @@ function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 
   return { connected, findProducts };
 }
 
-module.exports = { createSerpApi, storeName, storeLink };
+module.exports = { createSerpApi, storeName, storeLink, sizeSuggestion };
