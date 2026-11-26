@@ -19,4 +19,7 @@ function buyUrl(offer, productName) {
   return search ? search(productName) : null;
 }
 
-module.exports = { buyUrl };
+// The store's own search page for a product name, or null for stores we don't know.
+const storeSearchUrl = (store, q) => (SEARCH[store] ? SEARCH[store](q) : null);
+
+module.exports = { buyUrl, storeSearchUrl };
