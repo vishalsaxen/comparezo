@@ -58,7 +58,7 @@ function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 25
         // A source returns a list, or { results, note } to explain an empty answer.
         const list = (Array.isArray(got) ? got : Array.isArray(got && got.results) ? got.results : []).slice(0, perSource);
         all.push(...list.map(r => ({ ...r, source: src.name })));
-        statuses.push({ name: src.name, ok: true, count: list.length, ...(got && got.note ? { note: String(got.note).slice(0, 300) } : {}), ...(got && got.details ? { details: got.details } : {}) });
+        statuses.push({ name: src.name, ok: true, count: list.length, ...(got && got.note ? { note: String(got.note).slice(0, 300) } : {}), ...(got && got.details ? { details: got.details } : {}), ...(got && got.suggest ? { suggest: String(got.suggest).slice(0, 120) } : {}) });
       } catch (e) {
         statuses.push({ name: src.name, ok: false, error: String(e && e.message || e).slice(0, 300) });
       }

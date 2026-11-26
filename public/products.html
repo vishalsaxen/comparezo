@@ -42,6 +42,7 @@
         <input id="findQ" maxlength="120" aria-label="Product name" placeholder="e.g. boAt Airdopes 141, Nescafé Classic 200g">
         <button class="btn btn-brand" type="submit" id="findBtn">Search stores</button>
       </form>
+      <div class="src-note" id="findSources" hidden></div>
       <div class="find-bar" id="findBar" hidden>
         <div class="chips" id="findChips" aria-label="Filter by store"></div>
         <div class="seg" id="findSort" aria-label="Sort">
@@ -51,7 +52,6 @@
       </div>
       <div id="findOnSite" hidden></div>
       <div class="rgrid" id="findResults"></div>
-      <div class="src-note" id="findSources" hidden></div>
       <div class="src-note">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16v.5"/></svg>
         <span>Results come from official store APIs and affiliate product feeds (Amazon Creators API, Flipkart Affiliate API, Admitad product feeds) and from Google Shopping India through SerpApi, never from copying store pages. A store without a feed can be added in step 2 by pasting its link.</span>

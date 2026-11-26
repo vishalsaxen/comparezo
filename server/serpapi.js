@@ -13,13 +13,13 @@
 // Each admin search costs 1 + SERPAPI_DETAIL_LOOKUPS SerpApi searches (free plan: 250 a month),
 // and repeats within SERPAPI_CACHE_HOURS cost nothing.
 
-const { checkVariant, parseQuery } = require('./variant');
+const { checkVariant, parseQuery, norm, isSize } = require('./variant');
 const { storeSearchUrl } = require('./stores');
 
 const API = 'https://serpapi.com/search.json';
 // Google's store names → the names Comparezo already uses.
 const STORE_NAMES = { 'amazon': 'Amazon.in', 'amazon in': 'Amazon.in', 'amazon.in': 'Amazon.in', 'flipkart': 'Flipkart',
-  'croma': 'Croma', 'reliance digital': 'Reliance Digital', 'vijay sales': 'Vijay Sales', 'jiomart': 'JioMart',
+  'croma': 'Croma', 'reliance digital': 'Reliance Digital', 'vijay sales': 'Vijay Sales', 'jiomart': 'JioMart', 'jiomart electronic': 'JioMart', 'jiomart electronics': 'JioMart', 'jiomart digital': 'JioMart',
   'tata cliq': 'Tata CLiQ', 'tatacliq': 'Tata CLiQ', 'snapdeal': 'Snapdeal', 'myntra': 'Myntra', 'ajio': 'Ajio',
   'nykaa': 'Nykaa', 'meesho': 'Meesho', 'poorvika': 'Poorvika', 'sangeetha mobiles': 'Sangeetha Mobiles' };
 
@@ -41,6 +41,23 @@ function storeLink(u) {
 }
 
 const price = r => (typeof r.extracted_price === 'number' && r.extracted_price > 0 ? r.extracted_price : null);
+
+// When a size finds little, the size most listings were left out for: "Most listings are 256GB".
+// Sizes under 32GB are RAM, not storage, so they're ignored.
+function sizeSuggestion(q, query, dropped, found) {
+  if (found >= 5 || query.sizes.length !== 1) return null;
+  const count = {};
+  for (const r of dropped) {
+    if (!/^different size/.test(r.reason || '')) continue;
+    const sizes = [...new Set(norm(r.title).split(' ').filter(isSize))]
+      .filter(t => /tb$/.test(t) || parseInt(t, 10) >= 32).filter(t => t !== query.sizes[0]);
+    for (const t of sizes) count[t] = (count[t] || 0) + 1;
+  }
+  const [size, n] = Object.entries(count).sort((a, b) => b[1] - a[1])[0] || [];
+  if (!size || n < 2) return null;
+  const re = new RegExp(`${parseInt(query.sizes[0], 10)}\\s*${query.sizes[0].replace(/^\d+/, '')}`, 'i');
+  return { size, q: q.replace(re, size.toUpperCase()) };
+}
 
 function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 2, cacheHours = 6, timeoutMs = 20000, now = () => Date.now() } = {}) {
   const connected = Boolean(apiKey);
@@ -141,7 +158,9 @@ function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 
       noLink: noLink.slice(0, 40),
     };
     console.log(`Google Shopping "${q}": ${listings.length} found, ${kept.length} kept, ${results.length} with links, lookups ${JSON.stringify(details.lookups)}, left out: ${dropped.map(r => `${storeName(r.source)}|${r.title}|${r.reason}`).join(' ;; ').slice(0, 3000)}, no link: ${noLink.map(r => `${r.store}|${r.title}`).join(' ;; ').slice(0, 1500)}`);
-    const value = { results, note: parts.join(' '), details };
+    const suggest = sizeSuggestion(q, query, dropped, results.length);
+    if (suggest) parts.push(`Most listings are ${suggest.size.toUpperCase()}.`);
+    const value = { results, note: parts.join(' '), details, ...(suggest ? { suggest: suggest.q } : {}) };
     cache.set(key, { at: now(), value });
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     return value;
