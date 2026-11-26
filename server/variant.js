@@ -57,4 +57,4 @@ function checkVariant(q, title) {
   return { ok: true, sizeConfirmed: true };
 }
 
-module.exports = { checkVariant, parseQuery, norm };
+module.exports = { checkVariant, parseQuery, norm, isSize };

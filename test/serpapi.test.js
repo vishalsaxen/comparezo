@@ -26,6 +26,7 @@ test('store names and links', () => {
   assert.equal(storeName('Amazon.in - Seller'), 'Amazon.in');
   assert.equal(storeName('Flipkart'), 'Flipkart');
   assert.equal(storeName('EMI Snapmint'), 'Snapmint');
+  assert.equal(storeName('JioMart Electronic'), 'JioMart');
   assert.equal(storeName('Reliance Digital'), 'Reliance Digital');
   assert.equal(storeLink('https://www.croma.com/p/123?srsltid=abc&x=1'), 'https://www.croma.com/p/123?x=1');
   assert.equal(storeLink('https://www.google.com/shopping/product/1'), null);
@@ -116,4 +117,20 @@ test('Find in stores: other models are shown as not the same product', async () 
   assert.deepEqual(r.results.map(x => [x.price, x.match]), [[74999, 'exact'], [77599, 'close'], [104999, 'close']]);
   assert.match(r.results[1].why, /size not stated/);
   assert.match(r.results[2].why, /different model \(pro\)/);
+});
+
+test('when a size finds little, the note says which size most listings are', async () => {
+  const shopping = { shopping_results: [
+    { title: 'Google Pixel 11 5G (12GB RAM, 256GB Storage) | Pistachio', source: 'Vijay Sales', extracted_price: 79999 },
+    { title: 'Google Pixel 11 12GB 512GB Frost', source: 'Sangeetha Mobiles', extracted_price: 89999 },
+    { title: 'Google Pixel 11 (Obsidian, 256 GB) (12 GB RAM)', source: 'Flipkart', extracted_price: 79999 },
+    { title: 'Google Pixel 11 Pro 256GB', source: 'Croma', extracted_price: 109999 },
+  ] };
+  const s = createSerpApi({ apiKey: 'k', fetch: async () => ({ ok: true, status: 200, json: async () => shopping }) });
+  const r = await s.findProducts('Google Pixel 11 128GB');
+  assert.equal(r.results.length, 0);
+  assert.equal(r.suggest, 'Google Pixel 11 256GB');
+  assert.match(r.note, /Most listings are 256GB/);
+  const r2 = await s.findProducts('google pixel 11 128 gb');
+  assert.equal(r2.suggest, 'google pixel 11 256GB');
 });

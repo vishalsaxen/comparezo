@@ -727,7 +727,7 @@ function detailsHtml(d) {
 
 function renderSources(r) {
   const searched = (r.sources || []).map(s => `<li><strong>${esc(s.name)}</strong>: ${s.ok
-    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}${detailsHtml(s.details)}`
+    ? `${s.count} found${s.note ? ` <span class="sub">(${esc(s.note)})</span>` : ''}${s.suggest ? ` <button type="button" class="btn btn-ghost small" data-suggest="${esc(s.suggest)}">Search “${esc(s.suggest)}”</button>` : ''}${detailsHtml(s.details)}`
     : `<span class="err">${esc(s.error)}</span>`}</li>`);
   const off = Object.entries(r.notConnected || {}).map(([k, v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`);
   $('findSources').hidden = !searched.length && !off.length;
@@ -807,6 +807,13 @@ function renderReview() {
     : '<div class="empty-state">Your product card appears here.</div>';
 }
 
+// "Search 'Google Pixel 11 256GB'" when the size searched for finds little.
+$('findSources').addEventListener('click', e => {
+  const b = e.target.closest('[data-suggest]');
+  if (!b) return;
+  $('findQ').value = b.dataset.suggest;
+  $('findForm').requestSubmit();
+});
 $('findChips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; find.store = b.dataset.s; renderFind(); });
 $('findSort').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
