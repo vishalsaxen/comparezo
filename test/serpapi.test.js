@@ -25,6 +25,7 @@ test('variant check: same model and size only', () => {
 test('store names and links', () => {
   assert.equal(storeName('Amazon.in - Seller'), 'Amazon.in');
   assert.equal(storeName('Flipkart'), 'Flipkart');
+  assert.equal(storeName('EMI Snapmint'), 'Snapmint');
   assert.equal(storeName('Reliance Digital'), 'Reliance Digital');
   assert.equal(storeLink('https://www.croma.com/p/123?srsltid=abc&x=1'), 'https://www.croma.com/p/123?x=1');
   assert.equal(storeLink('https://www.google.com/shopping/product/1'), null);
@@ -42,6 +43,10 @@ function fakeFetch(calls) {
         { title: 'Google Pixel 11 128GB Obsidian', source: 'Flipkart', extracted_price: 74999, immersive_product_page_token: 'T1', product_link: 'https://www.google.com/shopping/product/1', thumbnail: 'https://encrypted-tbn0.gstatic.com/a.jpg' },
         { title: 'Google Pixel 11 Pro 128GB', source: 'Flipkart', extracted_price: 104999, immersive_product_page_token: 'T2' },
         { title: 'Spigen case for Google Pixel 11', source: 'Amazon.in', extracted_price: 1499, immersive_product_page_token: 'T3' },
+        { title: 'Google Pixel 11 5G 128 GB', source: 'JioMart', extracted_price: 77999, product_link: 'https://www.google.com/shopping/product/9' },
+        { title: 'Google Pixel 11 128GB', source: 'JioMart', extracted_price: 78999 },
+        { title: 'Google Pixel 11 128GB', source: 'Some Shop', extracted_price: 73999 },
+        { title: 'Google Pixel 11 128GB', source: 'Amazon.in', extracted_price: 76999 },
       ],
       inline_shopping_results: [
         { title: 'Google Pixel 11 128 GB', source: 'Vijay Sales', extracted_price: 75490, link: 'https://www.vijaysales.com/p/pixel-11?srsltid=x' },
@@ -67,7 +72,11 @@ test('SerpApi source: exact product, store links, few searches, cached', async (
   const s = createSerpApi({ apiKey: 'k', fetch: fakeFetch(calls), detailLookups: 2, now: () => t });
   assert.equal(s.connected, true);
   const r = await s.findProducts('Google Pixel 11 128GB');
-  assert.deepEqual(r.results.map(x => [x.store, x.price]), [['Flipkart', 74999], ['Vijay Sales', 75490], ['Amazon.in', 76490]]);
+  // JioMart has only a Google link, so it opens JioMart's search; Amazon.in already has its own link; Some Shop has none.
+  assert.deepEqual(r.results.map(x => [x.store, x.price]), [['Flipkart', 74999], ['Vijay Sales', 75490], ['Amazon.in', 76490], ['JioMart', 77999]]);
+  assert.equal(r.results[3].url, 'https://www.jiomart.com/search/Google%20Pixel%2011%20128GB');
+  assert.match(r.note, /1 link opens the store's search/);
+  assert.match(r.note, /Skipped 1 listing/);
   assert.equal(r.results[0].url, 'https://www.flipkart.com/google-pixel-11/p/itm1');
   assert.equal(r.results[0].mrp, 79999);
   assert.equal(r.results[0].image, 'https://encrypted-tbn0.gstatic.com/a.jpg');
@@ -98,8 +107,10 @@ test('Find in stores: other models are shown as not the same product', async () 
   const s = createStoreSearch(db, { sources: [{ name: 'X', find: async () => [
     { store: 'Flipkart', title: 'Google Pixel 11 (Obsidian, 128 GB)', price: 74999, url: 'https://www.flipkart.com/p/1' },
     { store: 'Flipkart', title: 'Google Pixel 11 Pro 128GB', price: 104999, url: 'https://www.flipkart.com/p/2' },
+    { store: 'Snapmint', title: 'Google Pixel 11 (Hibiscus)', price: 77599, url: 'https://snapmint.com/p/1' },
   ] }] });
   const r = await s.search('Google Pixel 11 128GB');
-  assert.deepEqual(r.results.map(x => [x.price, x.match]), [[74999, 'exact'], [104999, 'close']]);
-  assert.match(r.results[1].why, /different model \(pro\)/);
+  assert.deepEqual(r.results.map(x => [x.price, x.match]), [[74999, 'exact'], [77599, 'close'], [104999, 'close']]);
+  assert.match(r.results[1].why, /size not stated/);
+  assert.match(r.results[2].why, /different model \(pro\)/);
 });

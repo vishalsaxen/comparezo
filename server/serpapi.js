@@ -8,10 +8,13 @@
 // 2. Keep only the exact product (variant.js): no Pro/11a/XL, no other storage, no cases or renewed.
 // 3. google_immersive_product for the best few of those: every store selling it, each with its
 //    price and its own product link, so Buy goes straight to the store (and earns commission).
+// 4. Other exact matches that Google lists only with a Google link: for stores Comparezo knows
+//    (Amazon.in, Flipkart, JioMart...) the listing links to that store's own search for the product.
 // Each admin search costs 1 + SERPAPI_DETAIL_LOOKUPS SerpApi searches (free plan: 250 a month),
 // and repeats within SERPAPI_CACHE_HOURS cost nothing.
 
 const { checkVariant, parseQuery } = require('./variant');
+const { storeSearchUrl } = require('./stores');
 
 const API = 'https://serpapi.com/search.json';
 // Google's store names → the names Comparezo already uses.
@@ -21,7 +24,7 @@ const STORE_NAMES = { 'amazon': 'Amazon.in', 'amazon in': 'Amazon.in', 'amazon.i
   'nykaa': 'Nykaa', 'meesho': 'Meesho', 'poorvika': 'Poorvika', 'sangeetha mobiles': 'Sangeetha Mobiles' };
 
 function storeName(raw) {
-  const s = String(raw || '').replace(/\s*-\s*(seller|sold by).*$/i, '').replace(/\s+/g, ' ').trim();
+  const s = String(raw || '').replace(/\s*-\s*(seller|sold by).*$/i, '').replace(/^emi\s+/i, '').replace(/\s+/g, ' ').trim();
   return STORE_NAMES[s.toLowerCase()] || STORE_NAMES[s.toLowerCase().replace(/\.(in|com)$/, '')] || s || 'Store';
 }
 
@@ -80,6 +83,8 @@ function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 
     for (const r of listings) (checkVariant(query, r.title).ok ? kept : dropped).push(r);
 
     // 2. The best few exact matches: ask for every store that sells each of them.
+    // Listings Google sells through several stores first: their lookup lists the most stores.
+    kept.sort((a, b) => (b.multiple_sources === true) - (a.multiple_sources === true) || price(a) - price(b));
     const tokens = [...new Set(kept.map(r => r.immersive_product_page_token).filter(Boolean))].slice(0, Math.max(0, detailLookups));
     let used = 1;
     const details = await Promise.all(tokens.map(async token => {
@@ -102,13 +107,28 @@ function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 
       }
     }
     // Shopping results that already carry a store's own link.
-    for (const r of kept) add({ store: storeName(r.source), title: r.title, price: price(r), mrp: r.extracted_old_price || null, url: storeLink(r.link), image: r.thumbnail || null });
+    const direct = new Set(out.map(r => r.store.toLowerCase()));
+    for (const r of kept) {
+      const url = storeLink(r.link);
+      if (url) { add({ store: storeName(r.source), title: r.title, price: price(r), mrp: r.extracted_old_price || null, url, image: r.thumbnail || null }); direct.add(storeName(r.source).toLowerCase()); }
+    }
+    // The rest only have Google's link: use the store's own search, cheapest listing per store.
+    let viaSearch = 0, skipped = 0;
+    for (const r of [...kept].sort((a, b) => price(a) - price(b))) {
+      if (storeLink(r.link)) continue;
+      const store = storeName(r.source);
+      if (direct.has(store.toLowerCase())) continue;
+      const url = storeSearchUrl(store, q);
+      if (!url) { skipped++; continue; }
+      if (!seen.has(url)) viaSearch++;
+      add({ store, title: r.title, price: price(r), mrp: r.extracted_old_price || null, url, image: r.thumbnail || null });
+    }
 
-    const withoutLink = kept.filter(r => !storeLink(r.link)).length;
     const results = out.filter(r => r.price).sort((a, b) => a.price - b.price).slice(0, limit);
     const parts = [`Used ${used} SerpApi search${used === 1 ? '' : 'es'}.`];
     if (dropped.length) parts.push(`Left out ${dropped.length} other model${dropped.length === 1 ? '' : 's'}, sizes or accessories.`);
-    if (!results.length && withoutLink) parts.push('Google listed this product only with links to Google, not to the stores.');
+    if (viaSearch) parts.push(`${viaSearch} link${viaSearch === 1 ? '' : 's'} open${viaSearch === 1 ? 's' : ''} the store's search, because Google gave no product link.`);
+    if (skipped) parts.push(`Skipped ${skipped} listing${skipped === 1 ? '' : 's'} from stores without a product link.`);
     const value = { results, note: parts.join(' ') };
     cache.set(key, { at: now(), value });
     if (cache.size > 300) cache.delete(cache.keys().next().value);

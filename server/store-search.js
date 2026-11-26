@@ -80,7 +80,7 @@ function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 25
         title, price, mrp: mrp && mrp > price ? mrp : null,
         url, image: httpsUrl(r.image),
         source: r.source, match: s === 1 && variant.ok ? 'exact' : 'close',
-        ...(variant.ok ? {} : { why: variant.reason }),
+        ...(!variant.ok ? { why: variant.reason } : variant.sizeConfirmed === false ? { why: 'size not stated, check the page' } : {}),
       });
     }
     results.sort((a, b) => (a.match === b.match ? a.price - b.price : a.match === 'exact' ? -1 : 1));
