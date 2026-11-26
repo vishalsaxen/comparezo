@@ -743,7 +743,7 @@ function renderFind() {
       <span class="pick">${TICK}</span>
       <div class="rimg">${img(r.image, r.title)}</div>
       <div class="rbody">
-        <div class="rstore"><span style="display:flex;align-items:center">${sdot(r.store)}${esc(r.store)}</span><span class="match ${r.match}">${r.match === 'exact' ? 'Same product' : 'Similar'}</span></div>
+        <div class="rstore"><span style="display:flex;align-items:center">${sdot(r.store)}${esc(r.store)}</span><span class="match ${r.match}">${r.match === 'exact' ? 'Same product' : r.why ? esc(r.why[0].toUpperCase() + r.why.slice(1)) : 'Similar'}</span></div>
         <div class="rtitle" title="${esc(r.title)}">${esc(r.title)}</div>
         <div class="rprice"><span class="p">${inr(r.price)}</span>${r.mrp ? `<span class="strike">${inr(r.mrp)}</span><span class="off">${off}% off</span>` : ''}</div>
         <div class="links">

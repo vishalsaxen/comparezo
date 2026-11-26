@@ -5,6 +5,7 @@ const { createApp, DEFAULT_ORIGINS } = require('./app');
 const { createDeals } = require('./deals');
 const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
+const { createSerpApi } = require('./serpapi');
 const { createPartnerize } = require('./partnerize');
 const { createAffAlliances } = require('./affalliances');
 const { createInrDeals } = require('./inrdeals');
@@ -62,6 +63,7 @@ async function main() {
   console.log(process.env.CUELINKS_API_KEY ? 'Cuelinks deals: connected.' : 'Cuelinks deals: set CUELINKS_API_KEY to show deals.');
   console.log(process.env.ADMITAD_CLIENT_ID && process.env.ADMITAD_CLIENT_SECRET && process.env.ADMITAD_WEBSITE_ID ? 'Admitad deals: connected.' : 'Admitad deals: set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to show deals.');
   console.log(process.env.PARTNERIZE_APP_KEY && process.env.PARTNERIZE_API_KEY && process.env.PARTNERIZE_PUBLISHER_ID ? 'Partnerize earnings: connected.' : 'Partnerize earnings: set PARTNERIZE_APP_KEY, PARTNERIZE_API_KEY and PARTNERIZE_PUBLISHER_ID to read them.');
+  console.log(process.env.SERPAPI_KEY ? 'Google Shopping search (SerpApi): connected.' : 'Google Shopping search: set SERPAPI_KEY to find products across Indian stores on the Add products page.');
   console.log(process.env.EARNKARO_API_KEY ? 'EarnKaro: Buy links earn commission.' : 'EarnKaro: set EARNKARO_API_KEY to turn Buy links into commission links.');
   console.log(process.env.AFFALLIANCES_LINKS ? 'Aff Alliances: tracking links set.' : 'Aff Alliances: set AFFALLIANCES_LINKS to your tracking links (store domain=link) to use them on Buy.');
   console.log(process.env.INRDEALS_LINKS ? 'INRDeals: links set.' : 'INRDeals: set INRDEALS_LINKS to one linkinr.com link per store to use them on Buy.');
@@ -71,6 +73,7 @@ async function main() {
     cuelinksCid: (process.env.CUELINKS_CID || '').trim(),
     feedRunner,
     earnkaro: createEarnKaro({ apiKey: (process.env.EARNKARO_API_KEY || '').trim() }),
+    serpapi: createSerpApi({ apiKey: (process.env.SERPAPI_KEY || '').trim(), detailLookups: Number(process.env.SERPAPI_DETAIL_LOOKUPS ?? 2), cacheHours: Number(process.env.SERPAPI_CACHE_HOURS || 6) }),
     admitad: createAdmitad({ clientId: (process.env.ADMITAD_CLIENT_ID || '').trim(), clientSecret: (process.env.ADMITAD_CLIENT_SECRET || '').trim(), websiteId: (process.env.ADMITAD_WEBSITE_ID || '').trim() }),
     partnerize: createPartnerize({ appKey: (process.env.PARTNERIZE_APP_KEY || '').trim(), apiKey: (process.env.PARTNERIZE_API_KEY || '').trim(), publisherId: (process.env.PARTNERIZE_PUBLISHER_ID || '').trim() }),
     affalliances: createAffAlliances({ links: process.env.AFFALLIANCES_LINKS || '' }),
