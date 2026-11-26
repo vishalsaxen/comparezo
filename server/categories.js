@@ -21,6 +21,50 @@ const SETS = [
 
 const MAX_NAME = 40;
 
+// Outline icons for the category menu (drawn in public/cat-icons.js). Each top-level category
+// keeps one, picked on /categories.html. Categories without one get a default from their name.
+const ICONS = ['fashion', 'home', 'electrical', 'glass', 'beauty', 'grocery', 'crafts', 'toys', 'mobile', 'auto', 'sports',
+  'stationery', 'jewel', 'gifts', 'food', 'school', 'estate', 'civil', 'paint', 'doctor', 'other', 'tag', 'headphones', 'kitchen'];
+const DEFAULT_ICONS = {
+  'fashion & clothing': 'fashion', 'home & kitchen': 'home', 'electrical & electronics': 'electrical', 'glass products': 'glass',
+  'beauty & personal care': 'beauty', 'grocery & daily needs': 'grocery', 'handicrafts & handmade': 'crafts', 'toys, kids & baby': 'toys',
+  'mobile & computer': 'mobile', 'automotive': 'auto', 'sports & fitness': 'sports', 'stationery & office': 'stationery',
+  'jewellery & accessories': 'jewel', 'gifts & lifestyle': 'gifts', 'food': 'food', 'school & education': 'school', 'real estate': 'estate',
+  'civil engineering': 'civil', 'paintings': 'paint', 'doctors': 'doctor', 'other': 'other',
+  'electronics': 'headphones', 'mobiles': 'mobile', 'kitchen': 'kitchen', 'home': 'home', 'beauty': 'beauty',
+};
+// Fill in an icon for each top-level category that has none (new databases, and ones restored from before icons).
+function fillDefaultIcons(db) {
+  const cols = db.prepare('PRAGMA table_info(categories)').all().map(c => c.name);
+  if (!cols.includes('icon')) db.exec('ALTER TABLE categories ADD COLUMN icon TEXT');
+  const set = db.prepare('UPDATE categories SET icon = ? WHERE id = ?');
+  for (const c of db.prepare('SELECT id, name FROM categories WHERE parent_id IS NULL AND (icon IS NULL OR icon = \'\')').all()) {
+    set.run(DEFAULT_ICONS[c.name.toLowerCase()] || 'tag', c.id);
+  }
+}
+function setIcon(db, id, icon) {
+  const c = getOne(db, id);
+  if (c.parent_id != null) throw new CategoryError(400, 'Only top-level categories have an icon.');
+  if (!ICONS.includes(icon)) throw new CategoryError(400, 'Pick one of the icons shown.');
+  db.prepare('UPDATE categories SET icon = ? WHERE id = ?').run(icon, c.id);
+  return getOne(db, c.id);
+}
+
+// Deals: a category is required; a sub-category is optional (a store-wide sale has none).
+// A store-wide sale uses the special category "Whole store".
+const WHOLE_STORE = 'Whole store';
+function checkDealPath(db, category, subCategory) {
+  const name = String(category ?? '').trim(), sub = String(subCategory ?? '').trim();
+  if (!name) return { error: 'Pick a category, or "Whole store" for a sale on everything.' };
+  if (name.toLowerCase() === WHOLE_STORE.toLowerCase()) return sub ? { error: 'A whole-store deal has no sub-category.' } : { category: WHOLE_STORE, subCategory: null };
+  const top = db.prepare('SELECT * FROM categories WHERE parent_id IS NULL AND name = ? COLLATE NOCASE').get(name);
+  if (!top) return { error: `"${name.slice(0, 60)}" is not a category on Comparezo.` };
+  if (!sub) return { category: top.name, subCategory: null };
+  const s = db.prepare('SELECT * FROM categories WHERE parent_id = ? AND name = ? COLLATE NOCASE').get(top.id, sub);
+  if (!s) return { error: `"${sub.slice(0, 60)}" is not a sub-category of ${top.name}.` };
+  return { category: top.name, subCategory: s.name };
+}
+
 class CategoryError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -35,6 +79,7 @@ function seedCategories(db) {
     done.add('starter');
   }
   const todo = SETS.filter(([name]) => !done.has(name));
+  fillDefaultIcons(db);
   if (!todo.length) return false;
 
   const findTopId = db.prepare('SELECT id FROM categories WHERE parent_id IS NULL AND name = ? COLLATE NOCASE');
@@ -55,6 +100,7 @@ function seedCategories(db) {
       }
       db.prepare('INSERT INTO category_sets (name) VALUES (?)').run(setName);
     }
+    fillDefaultIcons(db);
     // Data saved before sub-categories existed used "Fashion" with no sub-category.
     for (const t of ['products', 'listings', 'purchases']) db.prepare(`UPDATE ${t} SET category = ? WHERE category = 'Fashion'`).run('Fashion & Clothing');
     db.exec('COMMIT');
@@ -72,8 +118,8 @@ function categoryTree(db) {
     kids.get(r.parent_id).push(r);
   }
   const of = id => kids.get(id) || [];
-  return db.prepare(`SELECT id, name FROM categories WHERE parent_id IS NULL ${ORDER}`).all().map(c => ({
-    id: c.id, name: c.name,
+  return db.prepare(`SELECT id, name, icon FROM categories WHERE parent_id IS NULL ${ORDER}`).all().map(c => ({
+    id: c.id, name: c.name, icon: ICONS.includes(c.icon) ? c.icon : 'tag',
     subcategories: of(c.id).map(s => ({ id: s.id, name: s.name, types: of(s.id).map(t => ({ id: t.id, name: t.name })) })),
   }));
 }
@@ -97,6 +143,8 @@ const LEVEL_COLS = ['category', 'sub_category', 'type'];
 function whereUnder(names) {
   return { sql: names.map((_, i) => `${LEVEL_COLS[i]} = ?`).join(' AND '), args: names };
 }
+
+const hasTable = (db, t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
 
 function findTop(db, name) {
   return name ? db.prepare('SELECT * FROM categories WHERE parent_id IS NULL AND name = ?').get(String(name)) : undefined;
@@ -160,6 +208,10 @@ function renameCategory(db, id, name) {
     for (const t of names.length === 1 ? ['products', 'listings', 'purchases'] : ['products', 'listings']) {
       db.prepare(`UPDATE ${t} SET ${col} = ? WHERE ${w.sql}`).run(name, ...w.args);
     }
+    // Deals (and the remembered feed-deal mappings) have a category and an optional sub-category.
+    if (names.length <= 2) for (const t of ['my_deals', 'deal_category_map']) {
+      if (hasTable(db, t)) db.prepare(`UPDATE ${t} SET ${col} = ? WHERE ${w.sql}`).run(name, ...w.args);
+    }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   return getOne(db, c.id);
@@ -184,8 +236,11 @@ function deleteCategory(db, id) {
   const w = whereUnder(pathOf(db, c));
   const used = ['products', 'listings'].reduce((n, t) => n + db.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE ${w.sql}`).get(...w.args).c, 0);
   if (used) throw new CategoryError(409, `"${c.name}" is used by ${used} product${used === 1 ? '' : 's'} or listing${used === 1 ? '' : 's'}. Move them first, or rename it instead.`);
+  const deals = w.args.length <= 2 && hasTable(db, 'my_deals') ? db.prepare(`SELECT COUNT(*) AS c FROM my_deals WHERE ${w.sql}`).get(...w.args).c : 0;
+  if (deals) throw new CategoryError(409, `"${c.name}" is used by ${deals} deal${deals === 1 ? '' : 's'}. Move them first, or rename it instead.`);
+  if (w.args.length <= 2 && hasTable(db, 'deal_category_map')) db.prepare(`DELETE FROM deal_category_map WHERE ${w.sql}`).run(...w.args);
   db.prepare('DELETE FROM categories WHERE id = ?').run(c.id);
   return { ok: true };
 }
 
-module.exports = { seedCategories, categoryTree, findTop, checkPath, addCategory, renameCategory, moveCategory, deleteCategory, CategoryError };
+module.exports = { seedCategories, categoryTree, findTop, checkPath, checkDealPath, WHOLE_STORE, addCategory, renameCategory, moveCategory, deleteCategory, setIcon, fillDefaultIcons, ICONS, CategoryError };

@@ -6,7 +6,7 @@
 <title>Manage categories · Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-14c">
+<link rel="stylesheet" href="/styles.css?v=2026-11-26a">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -23,7 +23,7 @@
 <main class="wrap cat-admin">
   <div class="eyebrow">Admin</div>
   <h1 class="lz-title">Categories</h1>
-  <p class="lede">Add, rename, reorder or remove categories, sub-categories and types (sub-sub-categories). Changes show up in search, the sell form and Linezo straight away, with no redeploy. "Other" always stays last.</p>
+  <p class="lede">Add, rename, reorder or remove categories, sub-categories and types (sub-sub-categories). Changes show up in search, the sell form and Linezo straight away, with no redeploy. "Other" always stays last. Each top-level category has an icon for the shoppers' category menu; tap the icon to change it.</p>
 
   <form class="panel pad key-row" id="keyForm">
     <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
@@ -40,6 +40,7 @@
   <div id="tree" class="cat-tree"></div>
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
-<script src="/categories-admin.js"></script>
+<script src="/cat-icons.js?v=2026-11-26a"></script>
+<script src="/categories-admin.js?v=2026-11-26a"></script>
 </body>
 </html>

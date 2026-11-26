@@ -47,7 +47,15 @@ function toDeal(o) {
     image: https(pick(o, 'image_url', 'image', 'banner_url', 'campaign.image_url', 'campaign.logo_url', 'logo_url')),
     url,
     endsAt: ends ? String(ends) : null,
+    // Cuelinks' own category for the offer (mapped to a Comparezo category, see deal-categories.js).
+    sourceCategory: categoryName(pick(o, 'categories', 'category', 'category_name', 'campaign.categories', 'campaign.category')),
   };
+}
+// The first name in a list like [{ id, name }] or ['Fashion'], or a plain string.
+function categoryName(v) {
+  const x = Array.isArray(v) ? v[0] : v;
+  const n = x && typeof x === 'object' ? x.name || x.title : x;
+  return typeof n === 'string' && n.trim() ? n.trim().slice(0, 120) : null;
 }
 
 function createDeals({ apiKey = '', fetch = globalThis.fetch, now = () => Date.now(), perPage = 50, maxPages = 60 } = {}) {

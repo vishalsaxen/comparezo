@@ -7,7 +7,7 @@
 <title>Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-15c">
+<link rel="stylesheet" href="/styles.css?v=2026-11-26a">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -54,6 +54,8 @@
         <input id="q" type="search" aria-label="Search products" placeholder="Search a product, e.g. earbuds, kurta, pressure cooker" autocomplete="off">
         <button class="btn btn-brand" type="submit">Compare</button>
       </form>
+      <!-- Category icons: tap one to see its products without typing. "All categories" opens the full menu. -->
+      <div class="cat-strip" id="catStrip" aria-label="Browse by category"></div>
     </section>
 
     <section class="compare wrap" aria-label="Comparison">
@@ -77,19 +79,46 @@
       <h1>Today's <em>best deals</em>, all in one place.</h1>
       <p class="lede">Coupons and offers from the stores. Codes and prices are set by the store and can change.</p>
     </section>
-    <section class="community wrap" id="dealList">
-      <h2>Number of deals now: <span id="dealCount">0</span></h2>
-      <div class="lgrid" id="dealGrid"></div>
-      <div class="empty" id="dealEmpty" hidden>No deals right now. Check back soon.</div>
+    <section class="community wrap browse" id="dealList">
+      <div class="browse-menu" id="dealMenu"></div>
+      <div class="browse-main">
+        <div class="crumb" id="dealCrumb"></div>
+        <div class="browse-head">
+          <h2><span id="dealHeading">Number of deals now</span>: <span id="dealCount">0</span></h2>
+          <button type="button" class="btn btn-ghost small browse-open" data-open-menu="deals">Categories</button>
+        </div>
+        <div class="chips sub-chips" id="dealSubs"></div>
+        <div class="lgrid" id="dealGrid"></div>
+        <div class="empty" id="dealEmpty" hidden>No deals right now. Check back soon.</div>
+        <div id="dealWhole" hidden>
+          <h3 class="whole-head">Whole-store sales from these stores</h3>
+          <div class="lgrid" id="dealWholeGrid"></div>
+        </div>
+      </div>
     </section>
   </div>
 
-  <!-- Seller Catalog tab: owner only, contents still to be decided -->
+  <!-- Seller Catalog tab: owner only for now. Live products from the GiaZoNest shop, read-only (server/giazonest.js). -->
   <div id="view-seller" role="tabpanel" aria-labelledby="tab-seller" hidden>
-    <section class="hero wrap">
-      <div class="eyebrow">Seller Catalog</div>
-      <h1>Seller Catalog</h1>
-      <p class="lede">Only you can see this tab, because this browser has the admin key. It is empty for now.</p>
+    <section class="hero wrap deals-hero">
+      <div class="eyebrow">Seller Catalog · only you see this tab</div>
+      <h1>Local sellers from <em>GiaZoNest</em></h1>
+      <p class="lede">Live, approved products from KYC-verified sellers on your GiaZoNest shop. Comparezo reads them from GiaZoNest, so a seller's new product, price or stock change shows here on the next sync (every 30 minutes).</p>
+      <div class="sync-row" id="scSync"></div>
+    </section>
+    <section class="community wrap browse">
+      <div class="browse-menu" id="scMenu"></div>
+      <div class="browse-main">
+        <div class="browse-tools">
+          <button type="button" class="btn btn-ghost small browse-open" data-open-menu="seller">Categories</button>
+          <label class="sbox"><input id="scQ" type="search" placeholder="Search GiaZoNest products or sellers" aria-label="Search Seller Catalog"></label>
+          <select id="scSort" aria-label="Sort"><option value="new">Newest first</option><option value="low">Price: low to high</option><option value="off">Biggest discount</option><option value="sold">Best selling</option></select>
+        </div>
+        <div class="crumb" id="scCrumb"></div>
+        <div class="chips sub-chips" id="scSellers"></div>
+        <div class="lgrid" id="scGrid"></div>
+        <div class="empty" id="scEmpty" hidden></div>
+      </div>
     </section>
   </div>
 
@@ -128,7 +157,10 @@
 </main>
 <footer><div class="wrap foot">Comparezo. Comparezo may earn a commission when you buy through store links, at no extra cost to you. · Contact: <a href="mailto:gizee@giazonest.com">gizee@giazonest.com</a> · <a href="/categories.html">Manage categories</a> · <a href="/products.html">Add products</a></div></footer>
 <div class="toast-pop" id="toast" role="status" hidden></div>
+<!-- The category menu slides in here on phones (and from "All categories" on the Comparezo tab). -->
+<div class="cm-sheet" id="catSheet" hidden><div class="cm-sheet-panel" id="catSheetPanel"></div></div>
+<script src="/cat-icons.js?v=2026-11-26a"></script>
 <script src="/spin.js?v=2026-11-15d"></script>
-<script src="/app.js?v=2026-11-24a"></script>
+<script src="/app.js?v=2026-11-26a"></script>
 </body>
 </html>

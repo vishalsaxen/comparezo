@@ -23,8 +23,12 @@ function row(item, i, list, level, parent) {
   const isSub = level > 0;
   const isOther = item.name === 'Other';
   const canUp = i > 0 && !isOther, canDown = i < list.length - 1 && list[i + 1].name !== 'Other' && !isOther;
+  // Top-level categories show their menu icon (the one shoppers see in the category menu); tap it to change it.
+  const ic = level === 0 && window.CzCat ? (unlocked
+    ? `<button type="button" class="cat-icon-btn" data-act="icon" aria-label="Change the icon for ${esc(item.name)}" title="Change icon">${CzCat.icon(item.icon)}</button>`
+    : `<span class="cat-icon-btn" aria-hidden="true">${CzCat.icon(item.icon)}</span>`) : '';
   return `<div class="cat-row${isSub ? ' is-sub' : ''}${level === 2 ? ' is-type' : ''}" data-id="${item.id}">
-    <span class="cat-name">${esc(item.name)}</span>
+    ${ic}<span class="cat-name">${esc(item.name)}</span>
     ${unlocked ? `<span class="cat-actions">
       <button type="button" class="btn btn-ghost small" data-act="up" ${canUp ? '' : 'disabled'} aria-label="Move ${esc(item.name)} up">↑</button>
       <button type="button" class="btn btn-ghost small" data-act="down" ${canDown ? '' : 'disabled'} aria-label="Move ${esc(item.name)} down">↓</button>
@@ -52,10 +56,12 @@ document.addEventListener('toggle', e => {
   d.open ? openTypes.add(Number(d.dataset.sub)) : openTypes.delete(Number(d.dataset.sub));
 }, true);
 
+let iconOpen = null;   // the category whose icon picker is open
 function render() {
   $('addForm').hidden = !unlocked;
   $('tree').innerHTML = tree.map((c, i) => `<section class="panel cat-card">
       ${row(c, i, tree, 0)}
+      ${unlocked && iconOpen === c.id ? `<div class="icon-pick" role="group" aria-label="Icon for ${esc(c.name)}">${CzCat.PICKABLE.map(n => `<button type="button" data-icon="${n}" data-for="${c.id}" aria-pressed="${c.icon === n}" title="${n}">${CzCat.icon(n)}</button>`).join('')}</div>` : ''}
       <div class="cat-subs">
         ${c.subcategories.length ? c.subcategories.map((s, j) => row(s, j, c.subcategories, 1, c.name) + types(s, c)).join('') : '<p class="sub">No sub-categories yet.</p>'}
       </div>
@@ -103,7 +109,14 @@ $('tree').addEventListener('submit', async e => {
 });
 
 $('tree').addEventListener('click', async e => {
+  const pickIcon = e.target.closest('[data-icon]');
+  if (pickIcon) {
+    try { tree = await call('PATCH', `/api/categories/${pickIcon.dataset.for}`, { icon: pickIcon.dataset.icon }); iconOpen = null; render(); toast('Icon changed. Shoppers see it in the category menu.'); }
+    catch (err) { say(err.message, 'err'); }
+    return;
+  }
   const b = e.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'icon') { const id = Number(b.closest('.cat-row').dataset.id); iconOpen = iconOpen === id ? null : id; render(); return; }
   const rowEl = b.closest('.cat-row'), id = rowEl.dataset.id, act = b.dataset.act;
   try {
     if (act === 'up' || act === 'down') tree = await call('PATCH', `/api/categories/${id}`, { move: act });

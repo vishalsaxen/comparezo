@@ -1,5 +1,6 @@
 // Comparezo front end. Public tabs: Comparezo (compare prices) and Super Saver Deals.
-// Owner-only tabs: Seller Catalog (placeholder) and Linezo (your sales tracker).
+// Owner-only tabs: Seller Catalog (GiaZoNest shop products) and Linezo (your sales tracker).
+// Comparezo, Super Saver Deals and Seller Catalog can be browsed by category (cat-icons.js draws the menu).
 (() => {
 const STORE_COLORS = {
   'Amazon.in': '#e08a00', 'Flipkart': '#2f6fdc', 'Meesho': '#b0307a', 'Myntra': '#e2445c',
@@ -59,15 +60,20 @@ const OWNER_TABS = ['seller', 'linezo'];
 function route() {
   const owner = !!adminKey();
   document.querySelectorAll('#tabs [data-owner]').forEach(a => { a.hidden = !owner; });
-  let tab = location.hash.slice(1);
-  if (!TABS[tab] || (OWNER_TABS.includes(tab) && !owner)) tab = 'compare';
+  // #deals, #deals/fashion-and-clothing/footwear, #deals/store/myntra, #seller/food, #compare/home-and-kitchen …
+  let [tab, ...rest] = location.hash.slice(1).split('/');
+  if (!TABS[tab] || (OWNER_TABS.includes(tab) && !owner)) { tab = 'compare'; rest = []; }
   for (const t of Object.keys(TABS)) {
     $('view-' + t).hidden = t !== tab;
     $('tab-' + t).setAttribute('aria-selected', t === tab);
   }
   document.title = tab === 'compare' ? 'Comparezo' : `${TABS[tab]} · Comparezo`;
+  closeSheet();
   if (tab === 'linezo' && !linezoLoaded) { linezoLoaded = true; loadTrends(); }
+  if (tab === 'deals') { pick.deals = rest; if (dealsLoaded) renderDeals(); }
   if (tab === 'deals' && dealsLoaded) offerSpin();
+  if (tab === 'seller') { pick.seller = rest; if (!sellerLoaded) loadSeller(); else renderSeller(); }
+  if (tab === 'compare') setCompareCategory(rest);
 }
 // Spin to win pops up the first time Super Saver Deals is opened in a session (see spin.js).
 let dealsLoaded = null;
@@ -78,7 +84,7 @@ window.addEventListener('hashchange', route);
 $('lzLogout').addEventListener('click', () => {
   try { localStorage.removeItem('cz-admin-key'); } catch { /* private mode */ }
   linezoLoaded = false;
-  if (OWNER_TABS.includes(location.hash.slice(1))) history.replaceState(null, '', '#compare');
+  if (OWNER_TABS.includes(location.hash.slice(1).split('/')[0])) history.replaceState(null, '', '#compare');
   route();
   toast('Logged out of Linezo. Enter your admin key on Add products to log in again.');
 });
@@ -200,19 +206,241 @@ async function loadNewArrivals() {
   // Only show the section once a store feed is connected and has something new.
   $('new').hidden = !data.items.length;
 }
-/* ---------- Super Saver Deals (the owner's own, then Admitad, then Cuelinks) ---------- */
+/* ---------- Category menus (Comparezo tab, Super Saver Deals, Seller Catalog; see cat-icons.js) ---------- */
+const WHOLE = 'Whole store';
+const pick = { deals: [], seller: [] };             // the #hash parts after the tab name
+const menuOpen = { deals: new Set(), seller: new Set(), compare: new Set() };
+const iconOf = name => (categories.find(c => c.name === name) || {}).icon || 'tag';
+const catBySlug = (list, sl) => list.find(x => CzCat.slug(x) === sl) || null;
+// Counts per category and sub-category: { [cat]: { n, subs: { [sub]: n } } }
+function countByCat(items, cat = x => x.category, sub = x => x.subCategory) {
+  const out = {};
+  for (const x of items) {
+    const c = cat(x); if (!c) continue;
+    const o = out[c] = out[c] || { n: 0, subs: {} };
+    o.n++;
+    const sb = sub(x); if (sb) o.subs[sb] = (o.subs[sb] || 0) + 1;
+  }
+  return out;
+}
+// The site's categories (in their order) with counts, for a drawer.
+const catRows = (counts, { onlyUsed = false } = {}) => {
+  const rows = categories.map(c => ({ name: c.name, icon: c.icon, count: (counts[c.name] || {}).n || 0,
+    subs: c.subcategories.map(sb => ({ name: sb.name, count: ((counts[c.name] || {}).subs || {})[sb.name] || 0 })).filter(sb => !onlyUsed || sb.count) }));
+  // Categories an item uses that the site doesn't have (e.g. from GiaZoNest) still get a row.
+  for (const [name, o] of Object.entries(counts)) if (name !== WHOLE && !categories.some(c => c.name === name)) rows.push({ name, icon: 'tag', count: o.n, subs: Object.entries(o.subs).map(([n, k]) => ({ name: n, count: k })) });
+  return onlyUsed ? rows.filter(r => r.count) : rows;
+};
+const crumbHtml = parts => parts.map(([label, href], i) => (i < parts.length - 1 && href ? `<a href="${href}">${esc(label)}</a>` : `<b>${esc(label)}</b>`)).join('<span aria-hidden="true">›</span>');
+
+// Phone sheet: the same drawer slides in from the left.
+let sheetKind = null;
+function openSheet(kind) { sheetKind = kind; renderSheet(); $('catSheet').hidden = false; document.body.classList.add('sheet-open'); }
+function closeSheet() { if ($('catSheet')) { $('catSheet').hidden = true; document.body.classList.remove('sheet-open'); sheetKind = null; } }
+function renderSheet() { if (sheetKind) $('catSheetPanel').innerHTML = menuHtml(sheetKind, true); }
+function menuHtml(kind, close = false) {
+  if (kind === 'deals') return dealMenu(close);
+  if (kind === 'seller') return sellerMenu(close);
+  return compareMenu(close);
+}
+// A pick from a drawer becomes a #link, so the back button and shared links work.
+function onPick(kind, p, fromSheet) {
+  const tops = { deals: 'stores', seller: 'sellers' };
+  if (p.top && p.top === tops[kind] && !p.val) { toggleOpen(kind, 'top:' + p.top, fromSheet); return; }
+  let h = '#' + kind;
+  if (p.top && p.val) h += `/${kind === 'deals' ? 'store' : 'seller'}/${CzCat.slug(p.val)}`;
+  else if (p.cat) { h += '/' + CzCat.slug(p.cat) + (p.sub ? '/' + CzCat.slug(p.sub) : ''); menuOpen[kind].add('cat:' + p.cat); }
+  if (location.hash === h) route(); else location.hash = h;
+}
+function toggleOpen(kind, id, fromSheet) {
+  const o = menuOpen[kind];
+  if (o.has(id)) o.delete(id); else o.add(id);
+  if (fromSheet) renderSheet();
+  else if (kind === 'deals') $('dealMenu').innerHTML = dealMenu();
+  else if (kind === 'seller') $('scMenu').innerHTML = sellerMenu();
+}
+for (const [kind, el] of [['deals', 'dealMenu'], ['seller', 'scMenu']]) CzCat.bind($(el), { pick: p => onPick(kind, p, false), toggle: id => toggleOpen(kind, id, false) });
+CzCat.bind($('catSheetPanel'), { pick: p => onPick(sheetKind, p, true), toggle: id => toggleOpen(sheetKind, id, true), close: closeSheet });
+$('catSheet').addEventListener('click', e => { if (e.target.id === 'catSheet') closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+document.addEventListener('click', e => { const b = e.target.closest('[data-open-menu]'); if (b) openSheet(b.dataset.openMenu); });
+
+/* ---------- Super Saver Deals (the owner's own, then Admitad, then Cuelinks), by category ---------- */
+let allDeals = [];
+// Where the deals view is: { cat, sub, store } resolved from the #deals/... link.
+function dealPlace() {
+  const [a, b] = pick.deals;
+  if (a === 'store') { const st = [...new Set(allDeals.map(d => d.store).filter(Boolean))].find(x => CzCat.slug(x) === b); return { store: st || null }; }
+  const counts = countByCat(allDeals);
+  const names = [...categories.map(c => c.name), ...Object.keys(counts)];
+  const cat = a ? names.find(n => CzCat.slug(n) === a) || null : null;
+  const subs = cat ? [...(categories.find(c => c.name === cat) || { subcategories: [] }).subcategories.map(x => x.name), ...Object.keys((counts[cat] || {}).subs || {})] : [];
+  const sub = cat && b ? subs.find(n => CzCat.slug(n) === b) || null : null;
+  return { cat, sub };
+}
+function dealMenu(close = false) {
+  const at = dealPlace();
+  const stores = Object.entries(allDeals.reduce((m, d) => { if (d.store) m[d.store] = (m[d.store] || 0) + 1; return m; }, {})).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+  if (at.store) menuOpen.deals.add('top:stores');
+  if (at.cat) menuOpen.deals.add('cat:' + at.cat);
+  return CzCat.drawer({ title: 'Category', close, open: menuOpen.deals,
+    current: at.store ? { top: 'stores', val: at.store } : at.cat ? { cat: at.cat, sub: at.sub } : { top: 'all' },
+    top: [{ id: 'all', label: "Today's best deals", icon: 'deals', count: allDeals.length },
+      { id: 'stores', label: 'Stores', icon: 'stores', rows: stores.map(([n, k]) => ({ id: n, label: n, count: k })) }],
+    cats: catRows(countByCat(allDeals)) });
+}
+const dealCard = d => {
+  const img = d.image ? `<div class="img" style="background-image:url('${esc(d.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : '';
+  const ends = d.endsAt ? ` · ends ${esc(fmtDay(d.endsAt.slice(0, 10)))}` : '';
+  const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';
+  const path = d.category ? `<div class="card-path">${esc(d.category === WHOLE ? 'Whole store sale' : catLabel(d.category, d.subCategory))}</div>` : '';
+  return `<article class="lcard">${img}<div class="body">${path}<div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc((d.url.startsWith('/api/') ? (window.CZ_API || '') : '') + d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
+};
+function renderDeals() {
+  const at = dealPlace();
+  let list = allDeals, whole = [];
+  if (at.store) list = allDeals.filter(d => d.store === at.store);
+  else if (at.cat) {
+    list = allDeals.filter(d => d.category === at.cat && (!at.sub || d.subCategory === at.sub));
+    // Store-wide sales of the stores in this list also cover it, so they show underneath.
+    const stores = new Set(list.map(d => d.store).filter(Boolean));
+    if (at.cat !== WHOLE) whole = allDeals.filter(d => d.category === WHOLE && stores.has(d.store));
+  }
+  $('dealMenu').innerHTML = dealMenu();
+  if (sheetKind === 'deals') renderSheet();
+  $('dealCrumb').innerHTML = at.store ? crumbHtml([['All deals', '#deals'], ['Stores'], [at.store]])
+    : at.cat ? crumbHtml([['All deals', '#deals'], [at.cat, '#deals/' + CzCat.slug(at.cat)], ...(at.sub ? [[at.sub]] : [])]) : '';
+  $('dealHeading').textContent = at.store ? `${at.store} deals` : at.cat ? `${at.sub || at.cat} deals` : 'Number of deals now';
+  // Sub-category chips under a category.
+  const subs = at.cat ? Object.entries((countByCat(allDeals)[at.cat] || { subs: {} }).subs) : [];
+  $('dealSubs').hidden = !subs.length;
+  $('dealSubs').innerHTML = subs.length ? `<a class="chip" href="#deals/${CzCat.slug(at.cat)}" aria-pressed="${!at.sub}">All ${esc(at.cat)}</a>` +
+    subs.map(([n, k]) => `<a class="chip" href="#deals/${CzCat.slug(at.cat)}/${CzCat.slug(n)}" aria-pressed="${at.sub === n}">${esc(n)} <span class="n">${k}</span></a>`).join('') : '';
+  $('dealGrid').innerHTML = list.map(dealCard).join('');
+  $('dealCount').textContent = list.length.toLocaleString('en-IN');
+  $('dealEmpty').hidden = list.length > 0;
+  $('dealEmpty').textContent = at.cat || at.store ? 'No deals here right now. Try another category.' : 'No deals right now. Check back soon.';
+  $('dealWhole').hidden = !whole.length;
+  $('dealWholeGrid').innerHTML = whole.map(dealCard).join('');
+}
 async function loadDeals() {
   const data = await api('/api/deals');
-  $('dealGrid').innerHTML = data.deals.map(d => {
-    const img = d.image ? `<div class="img" style="background-image:url('${esc(d.image)}');background-size:contain;background-repeat:no-repeat;background-color:#fff"></div>` : '';
-    const ends = d.endsAt ? ` · ends ${esc(fmtDay(d.endsAt.slice(0, 10)))}` : '';
-    const code = d.code ? `<span class="chip" title="Coupon code">${esc(d.code)}</span>` : '<span class="sub">No code needed</span>';
-    return `<article class="lcard">${img}<div class="body"><div class="t">${esc(d.title)}</div><div class="sub">${d.store ? sdot(d.store) + esc(d.store) : ''}${ends}</div><div class="row">${code}<a class="btn" href="${esc((d.url.startsWith('/api/') ? (window.CZ_API || '') : '') + d.url)}" target="_blank" rel="noopener sponsored">Get deal</a></div></div></article>`;
-  }).join('');
-  $('dealCount').textContent = data.deals.length.toLocaleString('en-IN');
-  $('dealEmpty').hidden = data.deals.length > 0;
+  allDeals = data.deals;
   dealsLoaded = data.deals;
-  if (location.hash === '#deals') offerSpin();
+  renderDeals();
+  if (location.hash.startsWith('#deals')) offerSpin();
+}
+
+/* ---------- Seller Catalog: live products from the GiaZoNest shop (owner only for now) ---------- */
+let sellerLoaded = false, catalog = { items: [] };
+const scState = { q: '', sort: 'new' };
+async function loadSeller(refresh = false) {
+  sellerLoaded = true;
+  $('scSync').innerHTML = '<span class="sub">Reading GiaZoNest…</span>';
+  try {
+    catalog = refresh ? await api('/api/admin/seller-catalog/refresh', { method: 'POST', headers: { 'X-Admin-Key': adminKey() } }) : await api('/api/seller-catalog');
+  } catch (err) { catalog = { items: catalog.items || [], error: err.message }; sellerLoaded = false; }
+  renderSeller();
+}
+// Seller names typed in capitals ("TWISTED IMLI CANDY") read better in title case. The seller's text isn't changed.
+const tidy = s => (s && s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/(^|[\s(/&-])([a-z])/g, (m, a, b) => a + b.toUpperCase()) : s);
+function sellerPlace() {
+  const [a, b] = pick.seller;
+  if (a === 'seller') return { seller: [...new Set(catalog.items.map(x => x.seller))].find(x => CzCat.slug(x) === b) || null };
+  const counts = countByCat(catalog.items);
+  const cat = a ? Object.keys(counts).find(n => CzCat.slug(n) === a) || null : null;
+  const sub = cat && b ? Object.keys(counts[cat].subs).find(n => CzCat.slug(n) === b) || null : null;
+  return { cat, sub };
+}
+function sellerMenu(close = false) {
+  const at = sellerPlace(), items = catalog.items;
+  const sellers = Object.entries(items.reduce((m, x) => { m[x.seller] = (m[x.seller] || 0) + 1; return m; }, {})).sort((x, y) => y[1] - x[1]);
+  if (at.cat) menuOpen.seller.add('cat:' + at.cat);
+  if (at.seller) menuOpen.seller.add('top:sellers');
+  return CzCat.drawer({ title: 'Category', close, open: menuOpen.seller, dimEmpty: false,
+    current: at.seller ? { top: 'sellers', val: at.seller } : at.cat ? { cat: at.cat, sub: at.sub } : { top: 'all' },
+    top: [{ id: 'all', label: 'All products', icon: 'all', count: items.length },
+      { id: 'sellers', label: 'By seller', icon: 'shop', rows: sellers.map(([n, k]) => ({ id: n, label: n, count: k })) }],
+    cats: catRows(countByCat(items), { onlyUsed: true }) });
+}
+const agoMin = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+function renderSeller() {
+  const items = catalog.items || [], at = sellerPlace();
+  const sellers = new Set(items.map(x => x.seller)), cities = new Set(items.map(x => x.city).filter(Boolean));
+  $('scSync').innerHTML = (catalog.syncedAt ? `<span class="live">Synced ${esc(agoMin(catalog.syncedAt))}</span>` : '')
+    + `<span><b class="num">${items.length}</b> live product${items.length === 1 ? '' : 's'}</span><span><b class="num">${sellers.size}</b> seller${sellers.size === 1 ? '' : 's'}</span>`
+    + (cities.size ? `<span><b class="num">${cities.size}</b> cit${cities.size === 1 ? 'y' : 'ies'}</span>` : '')
+    + `<button type="button" class="btn btn-ghost small" id="scRefresh">${CzCat.icon('sync')} Sync now</button>`
+    + (catalog.error ? `<span class="err">GiaZoNest could not be read: ${esc(catalog.error)}</span>` : '');
+  $('scMenu').innerHTML = sellerMenu();
+  if (sheetKind === 'seller') renderSheet();
+  let list = items;
+  if (at.seller) list = list.filter(x => x.seller === at.seller);
+  if (at.cat) list = list.filter(x => x.category === at.cat && (!at.sub || x.subCategory === at.sub));
+  const q = scState.q.toLowerCase();
+  if (q) list = list.filter(x => [x.name, x.seller, x.city, x.category, x.subCategory, x.type].some(v => String(v || '').toLowerCase().includes(q)));
+  const off = x => (x.price ? x.discount / x.price : 0);
+  if (scState.sort === 'low') list = list.slice().sort((a, b) => a.sellingPrice - b.sellingPrice);
+  if (scState.sort === 'off') list = list.slice().sort((a, b) => off(b) - off(a));
+  if (scState.sort === 'sold') list = list.slice().sort((a, b) => b.sold - a.sold);
+  $('scCrumb').innerHTML = crumbHtml([['Seller Catalog', '#seller'], ...(at.seller ? [[at.seller]] : at.cat ? [[at.cat, '#seller/' + CzCat.slug(at.cat)], ...(at.sub ? [[at.sub]] : [])] : [['All categories']])])
+    + ` <span class="sub">· ${list.length} product${list.length === 1 ? '' : 's'}</span>`;
+  const sc = Object.entries(items.reduce((m, x) => { m[x.seller] = (m[x.seller] || 0) + 1; return m; }, {}));
+  $('scSellers').innerHTML = sc.length > 1 ? `<a class="chip" href="#seller" aria-pressed="${!at.seller}">All sellers</a>` + sc.map(([n, k]) => `<a class="chip" href="#seller/seller/${CzCat.slug(n)}" aria-pressed="${at.seller === n}">${CzCat.icon('shop', 'ci sm')}${esc(n)} <span class="n">${k}</span></a>`).join('') : '';
+  const api0 = window.CZ_API || '';
+  $('scGrid').innerHTML = list.map(x => {
+    const pct = x.price && x.discount ? Math.round(x.discount * 100 / x.price) : 0;
+    const fb = x.hasThumb ? `${api0}/api/seller-catalog/thumb/${encodeURIComponent(x.id)}` : '';
+    return `<article class="lcard sc-card"><div class="img sc-img"><img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(fb)}" data-tile="${esc(catStyle(x.category).c)}|${esc(iconOf(x.category))}">${pct ? `<span class="badge-off">${pct}% off</span>` : ''}</div>
+      <div class="body"><div class="card-path">${esc(catLabel(x.category, x.subCategory, x.type))}</div><div class="t">${esc(tidy(x.name))}</div>
+        <div class="price num">${inr(x.sellingPrice)}${x.discount ? ` <s class="strike">${inr(x.price)}</s>` : ''}</div>
+        <div class="sub sc-seller">${CzCat.icon('shop', 'ci sm')}${esc(x.seller)}${x.city ? ' · ' + esc(x.city) : ''}</div>
+        <div class="sub${x.stock <= 10 ? ' low' : ''}">${x.stock ? `${x.stock} in stock` : 'Out of stock'}${x.sold ? ` · ${x.sold} sold` : ''}</div>
+        <div class="row"><a class="btn btn-brand small" href="${esc(x.url)}" target="_blank" rel="noopener">View on GiaZoNest ${CzCat.icon('ext', 'ci sm')}</a></div></div></article>`;
+  }).join('');
+  $('scEmpty').hidden = list.length > 0;
+  $('scEmpty').textContent = items.length ? 'No products match. Try another category or word.' : catalog.error ? 'GiaZoNest could not be read just now. Try Sync now in a minute.' : 'No live products on GiaZoNest yet.';
+}
+// A GiaZoNest photo that isn't published yet falls back to the saved thumbnail, then to a category tile.
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (img.tagName !== 'IMG' || !img.closest('.sc-img')) return;
+  if (img.dataset.fb) { const u = img.dataset.fb; img.dataset.fb = ''; img.src = u; return; }
+  const [color, ic] = (img.dataset.tile || '#5b6b66|tag').split('|');
+  const box = img.parentElement;
+  box.classList.add('tile'); box.style.background = color;
+  img.replaceWith(Object.assign(document.createElement('span'), { innerHTML: CzCat.icon(ic) }));
+}, true);
+$('scQ').addEventListener('input', e => { scState.q = e.target.value.trim(); renderSeller(); });
+$('scSort').addEventListener('change', e => { scState.sort = e.target.value; renderSeller(); });
+$('scSync').addEventListener('click', e => { if (e.target.closest('#scRefresh')) loadSeller(true); });
+
+/* ---------- Comparezo tab: category icons under the search, and the full menu ---------- */
+let compareCounts = {};
+function compareMenu(close = false) {
+  if (state.cat) menuOpen.compare.add('cat:' + state.cat);
+  const total = Object.values(compareCounts).reduce((a, o) => a + o.n, 0);
+  return CzCat.drawer({ title: 'Category', close, open: menuOpen.compare,
+    current: state.cat ? { cat: state.cat, sub: state.sub } : { top: 'all' },
+    top: [{ id: 'all', label: 'All products', icon: 'all', count: total }], cats: catRows(compareCounts) });
+}
+function renderStrip() {
+  $('catStrip').innerHTML = `<button type="button" class="cs-btn" data-open-menu="compare">${CzCat.icon('all')}<span>All categories</span></button>`
+    + categories.map(c => `<a class="cs-btn${(compareCounts[c.name] || {}).n ? '' : ' zero'}" href="#compare${state.cat === c.name ? '' : '/' + CzCat.slug(c.name)}" aria-pressed="${state.cat === c.name}">${CzCat.icon(c.icon)}<span>${esc(c.name)}</span></a>`).join('');
+}
+function setCompareCategory([a, b] = []) {
+  const c = a ? categories.find(x => CzCat.slug(x.name) === a) : null;
+  const sb = c && b ? c.subcategories.find(x => CzCat.slug(x.name) === b) : null;
+  const cat = c ? c.name : null, sub = sb ? sb.name : null;
+  if (cat === state.cat && sub === state.sub) { renderStrip(); return; }
+  Object.assign(state, { cat, sub, type: null });
+  renderStrip();
+  if (booted) loadProducts();
+}
+let booted = false;
+async function loadCompareCounts() {
+  compareCounts = countByCat(await api('/api/products'), p => p.category, p => p.sub_category);
+  renderStrip();
 }
 /* ---------- Linezo: trends ---------- */
 const lz = { days: 30, category: '' };
@@ -318,7 +546,8 @@ window.addEventListener('focus', () => loadCategories().then(changed => { if (ch
   await window.czReady;   // the gate stays down until the server is awake (gate.js)
   await loadCategories();
   route();
-  await Promise.all([loadProducts(), loadNewArrivals().catch(() => {}), loadDeals().catch(() => {})]);
+  booted = true;
+  await Promise.all([loadProducts(), loadCompareCounts().catch(() => {}), loadNewArrivals().catch(() => {}), loadDeals().catch(() => {})]);
   window.czOpenGate();
 })().catch(err => {
   $('detail').innerHTML = `<div class="empty">Could not load data: ${esc(err.message)}. Is the server running?</div>`;
