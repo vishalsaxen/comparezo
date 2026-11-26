@@ -115,6 +115,17 @@ To turn it on, set both of these on Render:
 
 Bright Data has no store lookup like SerpApi's. A listing with the store's own link uses it. A store listed in `server/stores.js` opens that store's search for the product. Other stores are skipped.
 
+### Quick commerce: Blinkit, Zepto, Swiggy Instamart, BigBasket
+
+Find in stores also searches quick-commerce apps through [QuickCommerce API](https://quickcommerceapi.com) (`server/quickcommerce.js`) and shows them as the **Quick commerce** source. One search asks every app at once (`/v1/groupsearch`) and costs **1 credit per app that answers**. Apps that fail cost nothing. The free plan gives 100 credits, so with the default 4 apps that's about 25 searches. Repeating a search within 6 hours uses none. Out-of-stock items are left out, and the same exact-product rules apply (size, model, accessories).
+
+Settings on Render:
+
+- `QCOM_API_KEY`: required, from quickcommerceapi.com/dashboard.
+- `QCOM_PLATFORMS`: apps to search, comma-separated and spelled as the API spells them. The default is `BlinkIt,Zepto,Swiggy,BigBasket`. Others include `DMart`, `JioMart`, `Minutes` (Flipkart Minutes), `Amazon`, `Flipkart`, `Nykaa`, `Myntra`, `Meesho`, `Ajio`, `FirstCry`. Each app adds 1 credit per search.
+- `QCOM_LAT`, `QCOM_LON`: the location the prices are for. Quick-commerce prices and stock change by area. The default is Bengaluru (12.9716, 77.5946).
+- `QCOM_PINCODE`: needed only for DMart, JioMart and Minutes. Without it they are skipped.
+
 Tick the listings, review, and add. The product then shows on the Comparezo tab (`#compare`) with each store's price, like any other product. Prices are saved when you add the product. To update them later, search again and edit the product.
 
 ## Adding products by hand

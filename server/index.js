@@ -7,6 +7,7 @@ const { createEarnKaro } = require('./earnkaro');
 const { createAdmitad } = require('./admitad');
 const { createSerpApi } = require('./serpapi');
 const { createBrightData } = require('./brightdata');
+const { createQuickCommerce } = require('./quickcommerce');
 const { createPartnerize } = require('./partnerize');
 const { createAffAlliances } = require('./affalliances');
 const { createInrDeals } = require('./inrdeals');
@@ -64,6 +65,7 @@ async function main() {
   console.log(process.env.CUELINKS_API_KEY ? 'Cuelinks deals: connected.' : 'Cuelinks deals: set CUELINKS_API_KEY to show deals.');
   console.log(process.env.ADMITAD_CLIENT_ID && process.env.ADMITAD_CLIENT_SECRET && process.env.ADMITAD_WEBSITE_ID ? 'Admitad deals: connected.' : 'Admitad deals: set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to show deals.');
   console.log(process.env.PARTNERIZE_APP_KEY && process.env.PARTNERIZE_API_KEY && process.env.PARTNERIZE_PUBLISHER_ID ? 'Partnerize earnings: connected.' : 'Partnerize earnings: set PARTNERIZE_APP_KEY, PARTNERIZE_API_KEY and PARTNERIZE_PUBLISHER_ID to read them.');
+  console.log(process.env.QCOM_API_KEY ? `Quick commerce (QuickCommerce API): connected, searching ${process.env.QCOM_PLATFORMS || 'BlinkIt,Zepto,Swiggy,BigBasket'}.` : 'Quick commerce: set QCOM_API_KEY to search Blinkit, Zepto, Swiggy Instamart and BigBasket.');
   console.log(process.env.BRIGHTDATA_API_KEY && process.env.BRIGHTDATA_ZONE ? 'Google Shopping backup (Bright Data): connected.' : 'Google Shopping backup: set BRIGHTDATA_API_KEY and BRIGHTDATA_ZONE to use Bright Data when SerpApi is used up.');
   console.log(process.env.SERPAPI_KEY ? 'Google Shopping search (SerpApi): connected.' : 'Google Shopping search: set SERPAPI_KEY to find products across Indian stores on the Add products page.');
   console.log(process.env.EARNKARO_API_KEY ? 'EarnKaro: Buy links earn commission.' : 'EarnKaro: set EARNKARO_API_KEY to turn Buy links into commission links.');
@@ -78,6 +80,13 @@ async function main() {
     serpapi: createSerpApi({ apiKey: (process.env.SERPAPI_KEY || '').trim(), detailLookups: Number(process.env.SERPAPI_DETAIL_LOOKUPS ?? 2), cacheHours: Number(process.env.SERPAPI_CACHE_HOURS || 6) }),
     brightdata: createBrightData({ apiKey: (process.env.BRIGHTDATA_API_KEY || '').trim(), zone: (process.env.BRIGHTDATA_ZONE || '').trim(), cacheHours: Number(process.env.SERPAPI_CACHE_HOURS || 6) }),
     shoppingOrder: (process.env.SHOPPING_ORDER || 'serpapi,brightdata').split(',').map(x => x.trim().toLowerCase()).filter(Boolean),
+    quickcommerce: createQuickCommerce({
+      apiKey: (process.env.QCOM_API_KEY || '').trim(),
+      platforms: (process.env.QCOM_PLATFORMS || 'BlinkIt,Zepto,Swiggy,BigBasket').split(',').map(x => x.trim()).filter(Boolean),
+      lat: Number(process.env.QCOM_LAT || 12.9716), lon: Number(process.env.QCOM_LON || 77.5946),
+      pincode: (process.env.QCOM_PINCODE || '').trim(),
+      cacheHours: Number(process.env.SERPAPI_CACHE_HOURS || 6),
+    }),
     admitad: createAdmitad({ clientId: (process.env.ADMITAD_CLIENT_ID || '').trim(), clientSecret: (process.env.ADMITAD_CLIENT_SECRET || '').trim(), websiteId: (process.env.ADMITAD_WEBSITE_ID || '').trim() }),
     partnerize: createPartnerize({ appKey: (process.env.PARTNERIZE_APP_KEY || '').trim(), apiKey: (process.env.PARTNERIZE_API_KEY || '').trim(), publisherId: (process.env.PARTNERIZE_PUBLISHER_ID || '').trim() }),
     affalliances: createAffAlliances({ links: process.env.AFFALLIANCES_LINKS || '' }),
