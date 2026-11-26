@@ -5,11 +5,11 @@
 // A source is { name, find(q, { limit, matches }) } returning
 // [{ store, title, price, mrp, url, image }] (or { results, note }). A slow or broken source never holds back the others.
 
-const { checkVariant, parseQuery } = require('./variant');
+const { checkVariant, parseQuery, UNIT, UNITS } = require('./variant');
 
 const STOP = new Set(['the', 'and', 'with', 'for', 'of', 'in', 'a', 'an', 'to', 'by', 'on']);
 function words(s) {
-  return [...new Set(String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/(\d+)\s*(gb|tb)\b/g, '$1$2')
+  return [...new Set(String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/(\d+)\s*(gb|tb)\b/g, '$1$2').replace(UNIT, (m, n, u) => n + (UNITS[u] || u))
     .split(/[^a-z0-9]+/).filter(w => w && !STOP.has(w) && (w.length > 1 || /\d/.test(w))))];
 }
 // Share of the search words found in a title, 0..1. "141" matches "141", "earbud" matches "earbuds".

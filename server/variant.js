@@ -17,9 +17,14 @@ const NOT_THE_PRODUCT = ['case', 'cover', 'tempered', 'protector', 'screen guard
   'back glass', 'replacement', 'battery for', 'display for', 'housing', 'dummy', 'compatible with',
   'refurbished', 'renewed', 'pre owned', 'preowned', 'used', 'unboxed'];
 
+// Weights and volumes written together, so "1 kg", "1kg" and "1 Kg" are one word.
+const UNITS = { gm: 'g', gms: 'g', grams: 'g', gram: 'g', ltr: 'l', litre: 'l', liter: 'l', litres: 'l', liters: 'l', kgs: 'kg' };
+const UNIT = /(\d+(?:\.\d+)?)\s*(kg|kgs|g|gm|gms|grams?|mg|ml|ltr|litres?|liters?|l)\b/g;
+
 function norm(text) {
   return String(text || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .replace(/(\d+)\s*(gb|tb)\b/g, '$1$2')   // "128 GB" -> "128gb"
+    .replace(UNIT, (m, n, u) => n + (UNITS[u] || u))   // "1 kg" -> "1kg", "500 gm" -> "500g"
     .replace(/[^a-z0-9+]+/g, ' ').trim();
 }
 const isSize = t => /^\d+(gb|tb)$/.test(t);
@@ -57,4 +62,4 @@ function checkVariant(q, title) {
   return { ok: true, sizeConfirmed: true };
 }
 
-module.exports = { checkVariant, parseQuery, norm, isSize };
+module.exports = { checkVariant, parseQuery, norm, isSize, UNIT, UNITS };
