@@ -6,17 +6,20 @@
 // Steps for a search such as "Google Pixel 11 128GB":
 // 1. google_shopping: Google Shopping results for India.
 // 2. Keep only the exact product (variant.js): no Pro/11a/XL, no other storage, no cases or renewed.
-// 3. google_immersive_product for the best few of those: every store selling it, each with its
+// 3. google_immersive_product for some of those: every store selling it, each with its
 //    price and its own product link, so Buy goes straight to the store (and earns commission).
 // 4. Other exact matches that Google lists only with a Google link: for stores Comparezo knows
 //    (Amazon.in, Flipkart, JioMart...) the listing links to that store's own search for the product.
-// Each admin search costs 1 + SERPAPI_DETAIL_LOOKUPS SerpApi searches (free plan: 250 a month),
-// and repeats within SERPAPI_CACHE_HOURS cost nothing.
+// Step 3 runs only when needed: for matches from stores we can't otherwise link to, or when fewer
+// than 3 stores were linked. So most searches cost 1 SerpApi search, at most 1 + SERPAPI_DETAIL_LOOKUPS
+// (free plan: 250 a month), and repeats within SERPAPI_CACHE_HOURS cost nothing.
 
 const { checkVariant, parseQuery, norm, isSize } = require('./variant');
 const { storeSearchUrl } = require('./stores');
 
 const API = 'https://serpapi.com/search.json';
+// With fewer stores than this linked from the shopping results, a store lookup looks for more.
+const MIN_STORES = 3;
 // Google's store names → the names Comparezo already uses.
 const STORE_NAMES = { 'amazon': 'Amazon.in', 'amazon in': 'Amazon.in', 'amazon.in': 'Amazon.in', 'flipkart': 'Flipkart',
   'croma': 'Croma', 'reliance digital': 'Reliance Digital', 'vijay sales': 'Vijay Sales', 'jiomart': 'JioMart', 'jiomart electronic': 'JioMart', 'jiomart electronics': 'JioMart', 'jiomart digital': 'JioMart',
@@ -102,10 +105,16 @@ function createSerpApi({ apiKey = '', fetch = globalThis.fetch, detailLookups = 
       if (v.ok) kept.push(r); else dropped.push({ ...r, reason: v.reason });
     }
 
-    // 2. The best few exact matches: ask for every store that sells each of them.
-    // Listings Google sells through several stores first: their lookup lists the most stores.
+    // 2. Store lookups cost a SerpApi search each, so they run only when needed:
+    //    - for matches from stores we can't link to otherwise (no store link, store not in stores.js), and
+    //    - when fewer than MIN_STORES stores could be linked, to find more stores.
+    // Listings Google sells through several stores go first: their lookup lists the most stores.
     kept.sort((a, b) => (b.multiple_sources === true) - (a.multiple_sources === true) || price(a) - price(b));
-    const tokens = [...new Set(kept.map(r => r.immersive_product_page_token).filter(Boolean))].slice(0, Math.max(0, detailLookups));
+    const linkable = r => Boolean(storeLink(r.link) || storeSearchUrl(storeName(r.source), q));
+    const linkedStores = new Set(kept.filter(linkable).map(r => storeName(r.source).toLowerCase()));
+    const wanted = kept.filter(r => !linkable(r));
+    if (linkedStores.size < MIN_STORES) wanted.push(...kept);
+    const tokens = [...new Set(wanted.map(r => r.immersive_product_page_token).filter(Boolean))].slice(0, Math.max(0, detailLookups));
     let used = 1;
     const details_ = await Promise.all(tokens.map(async token => {
       used++;

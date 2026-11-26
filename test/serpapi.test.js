@@ -18,6 +18,8 @@ test('variant check: same model and size only', () => {
   assert.ok(!ok('Google Pixel 11 128GB (Renewed)'));
   assert.equal(checkVariant('Google Pixel 11 128GB', 'Google Pixel 11').sizeConfirmed, false);
   assert.match(checkVariant('Google Pixel 11 128GB', 'Google Pixel 11a 128GB').reason, /different model \(11a\)/);
+  assert.ok(checkVariant('Tata Tea Gold 1 kg', 'Tata Tea Gold 1Kg Pack').ok);
+  assert.ok(!checkVariant('Tata Tea Gold 1 kg', 'Tata Tea Gold 500 g').ok);
   // Searches without a model number or size are left alone.
   assert.ok(checkVariant('cotton kurta set', 'Cotton kurta set with dupatta, used for festivals').ok);
 });
@@ -41,12 +43,12 @@ function fakeFetch(calls) {
     const engine = u.searchParams.get('engine');
     const json = engine === 'google_shopping' ? {
       shopping_results: [
-        { title: 'Google Pixel 11 128GB Obsidian', source: 'Flipkart', extracted_price: 74999, immersive_product_page_token: 'T1', product_link: 'https://www.google.com/shopping/product/1', thumbnail: 'https://encrypted-tbn0.gstatic.com/a.jpg' },
+        { title: 'Google Pixel 11 128GB Obsidian', source: 'Flipkart', extracted_price: 74999, immersive_product_page_token: 'T9', product_link: 'https://www.google.com/shopping/product/1' },
         { title: 'Google Pixel 11 Pro 128GB', source: 'Flipkart', extracted_price: 104999, immersive_product_page_token: 'T2' },
         { title: 'Spigen case for Google Pixel 11', source: 'Amazon.in', extracted_price: 1499, immersive_product_page_token: 'T3' },
         { title: 'Google Pixel 11 5G 128 GB', source: 'JioMart', extracted_price: 77999, product_link: 'https://www.google.com/shopping/product/9' },
         { title: 'Google Pixel 11 128GB', source: 'JioMart', extracted_price: 78999 },
-        { title: 'Google Pixel 11 128GB', source: 'Some Shop', extracted_price: 73999 },
+        { title: 'Google Pixel 11 128GB', source: 'Some Shop', extracted_price: 73999, immersive_product_page_token: 'T1', thumbnail: 'https://encrypted-tbn0.gstatic.com/a.jpg' },
         { title: 'Google Pixel 11 128GB', source: 'Amazon.in', extracted_price: 76999 },
       ],
       inline_shopping_results: [
@@ -85,7 +87,8 @@ test('SerpApi source: exact product, store links, few searches, cached', async (
   assert.equal(r.results[0].mrp, 79999);
   assert.equal(r.results[0].image, 'https://encrypted-tbn0.gstatic.com/a.jpg');
   assert.equal(r.results[1].url, 'https://www.vijaysales.com/p/pixel-11');
-  // Only the exact match was looked up: 1 shopping search + 1 detail lookup.
+  // Only Some Shop's listing needed a lookup (an unknown store with no store link): 1 shopping search + 1 lookup.
+  // Flipkart (T9) can already be linked through Flipkart's search, so it wasn't looked up.
   assert.deepEqual(calls.map(c => c.engine), ['google_shopping', 'google_immersive_product']);
   assert.match(r.note, /Used 2 SerpApi searches/);
   assert.match(r.note, /Left out 2/);
@@ -95,6 +98,36 @@ test('SerpApi source: exact product, store links, few searches, cached', async (
   t = 7 * 3600_000;
   await s.findProducts('Google Pixel 11 128GB');
   assert.equal(calls.length, 4);
+});
+
+test('store lookups run only when needed', async () => {
+  const run = async (shopping) => {
+    const calls = [];
+    const s = createSerpApi({ apiKey: 'k', fetch: async url => {
+      const u = new URL(url);
+      calls.push(u.searchParams.get('engine'));
+      const json = u.searchParams.get('engine') === 'google_shopping' ? { shopping_results: shopping }
+        : { product_results: { stores: [{ name: 'Croma', link: 'https://www.croma.com/p/9', title: 'Tata Tea Gold 1 kg', extracted_price: 560 }] } };
+      return { ok: true, status: 200, json: async () => json };
+    } });
+    return { r: await s.findProducts('Tata Tea Gold 1 kg'), calls };
+  };
+  // Three stores Comparezo can link to: no lookup, 1 search.
+  const a = await run([
+    { title: 'Tata Tea Gold 1 kg', source: 'Amazon.in', extracted_price: 549, immersive_product_page_token: 'A' },
+    { title: 'Tata Tea Gold 1kg', source: 'Flipkart', extracted_price: 555, immersive_product_page_token: 'B' },
+    { title: 'Tata Tea Gold Leaf 1 kg', source: 'BigBasket', extracted_price: 565, immersive_product_page_token: 'C' },
+  ]);
+  assert.deepEqual(a.calls, ['google_shopping']);
+  assert.match(a.r.note, /Used 1 SerpApi search\./);
+  assert.deepEqual(a.r.results.map(x => x.store), ['Amazon.in', 'Flipkart', 'BigBasket']);
+  // Only one store: one lookup to find more.
+  const b = await run([{ title: 'Tata Tea Gold 1 kg', source: 'Amazon.in', extracted_price: 549, immersive_product_page_token: 'A' }]);
+  assert.deepEqual(b.calls, ['google_shopping', 'google_immersive_product']);
+  assert.deepEqual(b.r.results.map(x => x.store), ['Amazon.in', 'Croma']);
+  // No exact match at all: no lookup.
+  const c = await run([{ title: 'Tata Tea Premium 500 g', source: 'Amazon.in', extracted_price: 249, immersive_product_page_token: 'A' }]);
+  assert.deepEqual(c.calls, ['google_shopping']);
 });
 
 test('SerpApi errors are explained; no key means not connected', async () => {

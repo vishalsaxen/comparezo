@@ -96,9 +96,9 @@ How a search such as "Google Pixel 11 128GB" works (`server/serpapi.js`):
 
 1. One `google_shopping` search for India.
 2. Only the exact product is kept (`server/variant.js`). Other models (Pro, 11a, XL), other storage sizes, cases, screen guards and renewed phones are left out. This only applies to searches with a model number or size, so "cotton kurta set" is left alone.
-3. For the best `SERPAPI_DETAIL_LOOKUPS` matches (default 2), a `google_immersive_product` lookup lists every store selling it, with each store's price and **its own product link**. Google's own links are never used, so Buy goes straight to the store through your commission links.
+3. For up to `SERPAPI_DETAIL_LOOKUPS` matches (default 2), a `google_immersive_product` lookup lists every store selling it, with each store's price and **its own product link**. Google's own links are never used, so Buy goes straight to the store through your commission links.
 
-Each admin search uses 1 + `SERPAPI_DETAIL_LOOKUPS` SerpApi searches. The free plan has 250 a month. Repeating a search within `SERPAPI_CACHE_HOURS` (default 6) uses none. The "Searched" box shows how many were used. SerpApi reads Google's results, not the store websites.
+Step 3 runs only when needed: for matches from stores that have no store link and aren't in `server/stores.js`, or when fewer than 3 stores could be linked. So most searches use 1 SerpApi search and at most 1 + `SERPAPI_DETAIL_LOOKUPS`. The free plan has 250 a month. Repeating a search within `SERPAPI_CACHE_HOURS` (default 6) uses none. The "Searched" box shows how many were used. SerpApi reads Google's results, not the store websites.
 
 The same variant check runs on every source: a listing with all the search words but another model or size shows as "Different model (pro)" or "Different size (256gb)" instead of "Same product", so it isn't ticked automatically.
 
