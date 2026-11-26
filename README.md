@@ -87,6 +87,22 @@ Stores don't publish an "uploaded on" date, so a product's arrival date is its s
 
 Defaults for the Flipkart categories and Amazon searches are in `server/feeds/index.js`. The "first seen" history lives in the database, so connect Firestore for these dates to survive restarts.
 
+## Finding products with Google Shopping (SerpApi)
+
+"Find in stores" on `/products.html` can search Google Shopping India through [SerpApi](https://serpapi.com). One search covers Amazon.in, Flipkart, Croma, Reliance Digital, Vijay Sales, JioMart and other stores Google lists. Set `SERPAPI_KEY` on Render to your SerpApi key (dashboard → API Key). Without it, the source is listed under "Not searched".
+
+How a search such as "Google Pixel 11 128GB" works (`server/serpapi.js`):
+
+1. One `google_shopping` search for India.
+2. Only the exact product is kept (`server/variant.js`). Other models (Pro, 11a, XL), other storage sizes, cases, screen guards and renewed phones are left out. This only applies to searches with a model number or size, so "cotton kurta set" is left alone.
+3. For the best `SERPAPI_DETAIL_LOOKUPS` matches (default 2), a `google_immersive_product` lookup lists every store selling it, with each store's price and **its own product link**. Google's own links are never used, so Buy goes straight to the store through your commission links.
+
+Each admin search uses 1 + `SERPAPI_DETAIL_LOOKUPS` SerpApi searches. The free plan has 250 a month. Repeating a search within `SERPAPI_CACHE_HOURS` (default 6) uses none. The "Searched" box shows how many were used. SerpApi reads Google's results, not the store websites.
+
+The same variant check runs on every source: a listing with all the search words but another model or size shows as "Different model (pro)" or "Different size (256gb)" instead of "Same product", so it isn't ticked automatically.
+
+Tick the listings, review, and add. The product then shows on the Comparezo tab (`#compare`) with each store's price, like any other product. Prices are saved when you add the product. To update them later, search again and edit the product.
+
 ## Adding products by hand
 
 Store APIs are hard to get, so you can also add products yourself. Open `/products.html` (linked as "Add products" in the footer) and enter the `ADMIN_KEY`. Fill in a product, its category, and for each store its price and product link. These links earn commission through Cuelinks like any other store link.

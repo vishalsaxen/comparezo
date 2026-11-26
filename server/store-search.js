@@ -1,13 +1,15 @@
 // "Find in stores" on /products.html: the owner types a product name and gets listings from
 // every store Comparezo is connected to, each with its title, price, link and photo link.
-// Only official partner APIs and product feeds are used (Amazon Creators API, Flipkart Affiliate
-// API, Admitad product feeds). Nothing reads store web pages.
+// Sources: official partner APIs and product feeds (Amazon Creators API, Flipkart Affiliate API,
+// Admitad product feeds) and Google Shopping India through SerpApi (serpapi.js). Nothing reads store web pages.
 // A source is { name, find(q, { limit, matches }) } returning
 // [{ store, title, price, mrp, url, image }] (or { results, note }). A slow or broken source never holds back the others.
 
+const { checkVariant, parseQuery } = require('./variant');
+
 const STOP = new Set(['the', 'and', 'with', 'for', 'of', 'in', 'a', 'an', 'to', 'by', 'on']);
 function words(s) {
-  return [...new Set(String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  return [...new Set(String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/(\d+)\s*(gb|tb)\b/g, '$1$2')
     .split(/[^a-z0-9]+/).filter(w => w && !STOP.has(w) && (w.length > 1 || /\d/.test(w))))];
 }
 // Share of the search words found in a title, 0..1. "141" matches "141", "earbud" matches "earbuds".
@@ -35,7 +37,7 @@ function withTimeout(promise, ms, name) {
     .finally(() => clearTimeout(t));
 }
 
-function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 15000, perSource = 20 } = {}) {
+function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 25000, perSource = 20 } = {}) {
   // Products already on Comparezo with a similar name, so the owner doesn't add one twice.
   function onSite(q) {
     const rows = db.prepare(`SELECT p.id, p.name, COUNT(o.id) AS storeCount, MIN(o.price) AS lowest
@@ -48,6 +50,7 @@ function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 15
     const q = String(query || '').trim().slice(0, 120);
     if (words(q).length === 0) return { q, error: 'Type a product name to search for.', results: [], sources: [], onSite: [] };
     const matches = title => score(q, title) >= MIN_SCORE;
+    const wanted = parseQuery(q);
     const statuses = [], all = [];
     await Promise.all(sources.map(async src => {
       try {
@@ -69,12 +72,15 @@ function createStoreSearch(db, { sources = [], notConnected = {}, timeoutMs = 15
       if (s < MIN_SCORE) continue;
       seen.add(url);
       const mrp = num(r.mrp);
+      // All the words can be there and it still be another model or size: "Pixel 11 Pro 128GB" for "Pixel 11 128GB".
+      const variant = checkVariant(wanted, title);
       results.push({
         id: results.length + 1,
         store: String(r.store || '').trim().slice(0, 40) || 'Store',
         title, price, mrp: mrp && mrp > price ? mrp : null,
         url, image: httpsUrl(r.image),
-        source: r.source, match: s === 1 ? 'exact' : 'close',
+        source: r.source, match: s === 1 && variant.ok ? 'exact' : 'close',
+        ...(variant.ok ? {} : { why: variant.reason }),
       });
     }
     results.sort((a, b) => (a.match === b.match ? a.price - b.price : a.match === 'exact' ? -1 : 1));

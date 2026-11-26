@@ -17,6 +17,7 @@ const { createInrDeals } = require('./inrdeals');
 const { createEarnings } = require('./earnings');
 const { importRows, storeFromUrl, checkDeal, httpsLink } = require('./bulk');
 const { createStoreSearch } = require('./store-search');
+const { createSerpApi } = require('./serpapi');
 const { createPhoneAuth, createSpins } = require('./spin');
 const { createDealClicks, subidFor } = require('./deal-clicks');
 const { createLinkRouting } = require('./link-routing');
@@ -32,7 +33,7 @@ const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), giazonest = createGiaZoNest(), cuelinksPageScript = false, storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), giazonest = createGiaZoNest(), cuelinksPageScript = false, storeSearch = null, serpapi = createSerpApi(), phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -255,6 +256,8 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const notConnected = { ...(status.notConnected || {}) };
     if (admitad.connected && admitad.findProducts) sources.push({ name: 'Admitad', find: admitad.findProducts });
     else notConnected.Admitad = 'Set ADMITAD_CLIENT_ID, ADMITAD_CLIENT_SECRET and ADMITAD_WEBSITE_ID to search the product feeds of stores you joined in Admitad.';
+    if (serpapi.connected) sources.push({ name: 'Google Shopping', find: serpapi.findProducts });
+    else notConnected['Google Shopping'] = 'Set SERPAPI_KEY (from serpapi.com) to search Google Shopping India: Amazon.in, Flipkart, Croma, Reliance Digital and more in one search.';
     notConnected.EarnKaro = 'EarnKaro only turns links into commission links. It has no product search, so stores you reach through EarnKaro are added by pasting their link.';
     storeSearch = createStoreSearch(db, { sources, notConnected });
   }
