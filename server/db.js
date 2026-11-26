@@ -114,6 +114,16 @@ CREATE TABLE IF NOT EXISTS deal_clicks (
   last_at TEXT,
   PRIMARY KEY (deal, day)
 );
+-- Feed deals (Admitad, Cuelinks) come with the network's own category name. The owner maps each
+-- name to a Comparezo category once, on /products.html ("Needs a category"), and it is remembered here.
+CREATE TABLE IF NOT EXISTS deal_category_map (
+  source TEXT NOT NULL,           -- admitad, cuelinks
+  name TEXT NOT NULL,             -- the network's category, lower case; "store:<name>" when a deal has none
+  category TEXT NOT NULL,         -- a Comparezo category, or "Whole store"
+  sub_category TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (source, name)
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;
@@ -136,6 +146,8 @@ function openDb(file) {
   };
   addCols('products', [['image', 'TEXT'], ['source', 'TEXT'], ['first_seen_at', 'TEXT'], ['listed_at', 'TEXT']]);
   addCols('offers', [['external_id', 'TEXT']]);
+  addCols('categories', [['icon', 'TEXT']]);                                     // menu icon (top-level only)
+  addCols('my_deals', [['category', 'TEXT'], ['sub_category', 'TEXT']]);         // required for new deals
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_offers_external ON offers(store, external_id) WHERE external_id IS NOT NULL');
   db.exec('CREATE INDEX IF NOT EXISTS idx_products_first_seen ON products(first_seen_at)');
   return db;

@@ -6,7 +6,7 @@
 <title>Add products · Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-16a">
+<link rel="stylesheet" href="/styles.css?v=2026-11-26a">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
@@ -73,9 +73,10 @@
       <div class="review">
         <form class="sell-form" id="reviewForm" novalidate>
           <div class="field full"><label for="r-name">Product name on Comparezo</label><input id="r-name" maxlength="200"><span class="hint">Filled from the store titles. Shorten it if you like.</span></div>
-          <div class="field"><label for="r-cat">Category</label><select id="r-cat"></select></div>
-          <div class="field"><label for="r-sub">Sub-category</label><select id="r-sub"></select></div>
-          <div class="field" id="r-type-wrap" hidden><label for="r-type">Type</label><select id="r-type"></select></div>
+          <div class="field full cat-suggest" id="r-suggest" hidden></div>
+          <div class="field"><label for="r-cat">Category <span class="req" aria-hidden="true">*</span></label><select id="r-cat" required></select></div>
+          <div class="field"><label for="r-sub">Sub-category <span class="req" aria-hidden="true">*</span></label><select id="r-sub"></select></div>
+          <div class="field" id="r-type-wrap" hidden><label for="r-type">Type <span class="req" aria-hidden="true">*</span></label><select id="r-type"></select></div>
           <div class="field full"><label for="r-spec">Short details</label><input id="r-spec" maxlength="200" placeholder="e.g. Bluetooth 5.3 · 42 h playback · IPX4"></div>
           <div class="field full"><span class="label">Main photo</span><div class="photo-pick" id="photoPick"></div><span class="hint">Pick which store's photo to show. The image link is saved with the product.</span></div>
           <div class="field full">
@@ -105,10 +106,11 @@
   </section>
 
   <form class="panel pad sell-form" id="productForm" novalidate hidden>
-    <div class="field full"><label for="p-name">Product name</label><input id="p-name" maxlength="200" placeholder="e.g. Single-line notebook, 172 pages, pack of 6"></div>
-    <div class="field"><label for="p-cat">Category</label><select id="p-cat"></select></div>
-    <div class="field"><label for="p-sub">Sub-category</label><select id="p-sub"></select></div>
-    <div class="field" id="p-type-wrap" hidden><label for="p-type">Type</label><select id="p-type"></select></div>
+    <div class="field full"><label for="p-name">Product name <span class="req" aria-hidden="true">*</span></label><input id="p-name" maxlength="200" placeholder="e.g. Single-line notebook, 172 pages, pack of 6"></div>
+    <div class="field full cat-suggest" id="p-suggest" hidden></div>
+    <div class="field"><label for="p-cat">Category <span class="req" aria-hidden="true">*</span></label><select id="p-cat" required></select></div>
+    <div class="field"><label for="p-sub">Sub-category <span class="req" aria-hidden="true">*</span></label><select id="p-sub"></select></div>
+    <div class="field" id="p-type-wrap" hidden><label for="p-type">Type <span class="req" aria-hidden="true">*</span></label><select id="p-type"></select></div>
     <div class="field full"><label for="p-spec">Short details</label><input id="p-spec" maxlength="200" placeholder="e.g. A5 size · 70 GSM · Blue cover"></div>
     <div class="field full"><label for="p-image">Photo link (optional)</label><input id="p-image" placeholder="https://… right-click the store's product photo and choose Copy image address"></div>
     <div class="field full">
@@ -124,7 +126,7 @@
 
   <section id="bulkWrap" hidden>
     <h2>Upload products from Excel</h2>
-    <p class="sub">Add many products at once. Put one store link per row with the columns <strong>Name</strong>, <strong>Image</strong>, <strong>URL</strong> and <strong>Price</strong>. You can also add MRP, Delivery, Store, Category, Sub-category, Type and Details. Rows with the same name become one product with several stores to compare. A product already on the site gets the new store links added to it. Excel (.xlsx) and CSV both work.</p>
+    <p class="sub">Add many products at once. Put one store link per row with the columns <strong>Name</strong>, <strong>Image</strong>, <strong>URL</strong> and <strong>Price</strong>. Every product needs a <strong>Category</strong> (and its Sub-category, and Type where it has one): fill the Category columns, or pick one below for rows without it. You can also add MRP, Delivery, Store and Details. Rows with the same name become one product with several stores to compare. A product already on the site gets the new store links added to it. Excel (.xlsx) and CSV both work.</p>
     <p><button type="button" class="btn btn-ghost small" id="dlTemplate">Download the Excel template</button> <button type="button" class="btn btn-ghost small" id="dlProducts">Download all products as Excel</button></p>
     <form class="panel pad sell-form" id="bulkForm" novalidate>
       <div class="field full"><label for="bulkFile">Excel or CSV file</label><input id="bulkFile" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></div>
@@ -153,12 +155,15 @@
     <p><button type="button" class="btn btn-ghost small" id="copyList">Copy list</button> <span id="copyStatus" role="status"></span></p>
     <div id="list" class="cat-tree"></div>
     <h2>Add deal</h2>
-    <p class="sub">Add a deal or coupon you found, for example in the EarnKaro app. Paste the store's own deal page link: with EarnKaro on, the "Get deal" button turns it into your commission link. Deals show at the top of "Number of deals now" and disappear after their end date.</p>
+    <p class="sub">Add a deal or coupon you found, for example in the EarnKaro app. Paste the store's own deal page link: with EarnKaro on, the "Get deal" button turns it into your commission link. Deals show at the top of "Number of deals now" and under their category on Super Saver Deals, and disappear after their end date. Every deal needs a category; pick <strong>Whole store</strong> for a sale on everything.</p>
     <form class="panel pad sell-form" id="dealForm" novalidate>
-      <div class="field full"><label for="d-title">Deal title</label><input id="d-title" maxlength="160" placeholder="e.g. Flat 40% off on running shoes"></div>
+      <div class="field full"><label for="d-title">Deal title <span class="req" aria-hidden="true">*</span></label><input id="d-title" maxlength="160" placeholder="e.g. Flat 40% off on running shoes"></div>
+      <div class="field full cat-suggest" id="d-suggest" hidden></div>
+      <div class="field"><label for="d-cat">Category <span class="req" aria-hidden="true">*</span></label><select id="d-cat" required></select></div>
+      <div class="field"><label for="d-sub">Sub-category <span class="opt">optional</span></label><select id="d-sub"></select></div>
       <div class="field"><label for="d-store">Store</label><input id="d-store" maxlength="60" list="d-stores" placeholder="e.g. Myntra"><datalist id="d-stores"></datalist></div>
       <div class="field"><label for="d-code">Coupon code (optional)</label><input id="d-code" maxlength="40" placeholder="Leave empty if none"></div>
-      <div class="field full"><label for="d-url">Deal link</label><input id="d-url" inputmode="url" placeholder="https://www.myntra.com/…"></div>
+      <div class="field full"><label for="d-url">Deal link <span class="req" aria-hidden="true">*</span></label><input id="d-url" inputmode="url" placeholder="https://www.myntra.com/…"></div>
       <div class="field full"><label for="d-desc">Details (optional)</label><input id="d-desc" maxlength="300" placeholder="e.g. Min. order ₹999, new users only"></div>
       <div class="field"><label for="d-image">Photo link (optional)</label><input id="d-image" placeholder="https://…"></div>
       <div class="field"><label for="d-ends">Ends on (optional)</label><input id="d-ends" type="date"></div>
@@ -168,10 +173,12 @@
       </div>
     </form>
     <h3>Upload deals from Excel</h3>
-    <p class="sub">Add many deals at once: one deal per row with the columns <strong>Title</strong> and <strong>URL</strong>, plus Store, Coupon code, Details, Image and Ends on if you have them. Dates can be 2026-12-31 or 31/12/2026. A deal with the same link and code as one already saved is skipped.</p>
+    <p class="sub">Add many deals at once: one deal per row with the columns <strong>Title</strong>, <strong>URL</strong> and <strong>Category</strong> (a Comparezo category, or "Whole store"), plus Sub-category, Store, Coupon code, Details, Image and Ends on if you have them. Rows without a category use the one picked below. Dates can be 2026-12-31 or 31/12/2026. A deal with the same link and code as one already saved is skipped.</p>
     <p><button type="button" class="btn btn-ghost small" id="dlDealTemplate">Download the deals template</button> <button type="button" class="btn btn-ghost small" id="dlDeals">Download my deals as Excel</button></p>
     <form class="panel pad sell-form" id="dealBulkForm" novalidate>
       <div class="field full"><label for="dealFile">Excel or CSV file</label><input id="dealFile" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></div>
+      <div class="field"><label for="db-cat">Category for rows without one</label><select id="db-cat"></select></div>
+      <div class="field"><label for="db-sub">Sub-category <span class="opt">optional</span></label><select id="db-sub"></select></div>
       <div class="field full" id="dealPreview" hidden></div>
       <div class="form-actions">
         <button class="btn btn-brand" type="submit" id="dealBulkAdd" disabled>Add these deals</button>
@@ -180,8 +187,11 @@
       <div class="field full" id="dealProblems" hidden></div>
     </form>
     <h2>My deals</h2>
-    <p class="sub"><strong>Edit</strong> changes a deal's title, store, code, link, details, photo or end date.</p>
+    <p class="sub"><strong>Edit</strong> changes a deal's title, category, store, code, link, details, photo or end date.</p>
     <div id="myDeals" class="cat-tree"></div>
+    <h2 id="needsTitle">Needs a category</h2>
+    <p class="sub">Deals from Admitad and Cuelinks come with the network's own category name, like "Women Ethnic Wear". Pick the Comparezo category for each name once and it is remembered for every deal with that name. Names that match a Comparezo category exactly are used straight away. Until a name is mapped, its deals still show under "Today's best deals". Your own deals saved before categories were required are listed here too.</p>
+    <div id="needs" class="needs"><p class="sub">Loading…</p></div>
     <h2>Admitad deals</h2>
     <p><button type="button" class="btn btn-ghost small" id="checkAdmitad">Check Admitad deals</button> <span id="admitadStatus" role="status"></span></p>
     <pre id="admitadOut" hidden style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px"></pre>
@@ -192,6 +202,7 @@
 </main>
 <div class="toast-pop" id="toast" role="status" hidden></div>
 <script src="/sheet.js"></script>
-<script src="/products-admin.js?v=2026-11-16a"></script>
+<script src="/cat-icons.js?v=2026-11-26a"></script>
+<script src="/products-admin.js?v=2026-11-26a"></script>
 </body>
 </html>

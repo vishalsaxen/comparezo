@@ -125,7 +125,9 @@ function dateOf(v) {
 }
 
 // Checks one deal (from the Add deal form or a sheet row). Returns { deal } or { errors }.
-function checkDeal(b = {}) {
+// With the database, the deal's category is checked too: a category (or "Whole store") is required,
+// a sub-category is optional. Capitals don't matter ("fashion & clothing" finds the category).
+function checkDeal(b = {}, db = null) {
   const str = (v, n) => String(v ?? '').trim().slice(0, n);
   const title = str(b.title, 160), url = str(b.url, 2000), image = str(b.image, 2000);
   const endsAt = dateOf(b.endsAt);
@@ -134,8 +136,11 @@ function checkDeal(b = {}) {
   if (!/^https:\/\/\S+$/.test(url)) errors.push('Paste the deal link, starting with https://.');
   if (image && !/^https:\/\/\S+$/.test(image)) errors.push('The photo link must start with https://.');
   if (endsAt === null) errors.push('Write the end date as YYYY-MM-DD or DD/MM/YYYY.');
+  const path = db ? cats.checkDealPath(db, b.category, b.subCategory) : { category: null, subCategory: null };
+  if (path.error) errors.push(path.error);
   if (errors.length) return { errors };
-  return { deal: { title, url, image: image || null, endsAt: endsAt || null, store: str(b.store, 60), code: str(b.code, 40) || null, description: str(b.description, 300) } };
+  return { deal: { title, url, image: image || null, endsAt: endsAt || null, store: str(b.store, 60), code: str(b.code, 40) || null, description: str(b.description, 300),
+    category: path.category, subCategory: path.subCategory } };
 }
 
 module.exports = { importRows, storeFromUrl, money, dateOf, checkDeal, httpsLink, MAX_ROWS };

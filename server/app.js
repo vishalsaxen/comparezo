@@ -20,6 +20,8 @@ const { createStoreSearch } = require('./store-search');
 const { createPhoneAuth, createSpins } = require('./spin');
 const { createDealClicks, subidFor } = require('./deal-clicks');
 const { createLinkRouting } = require('./link-routing');
+const { createGiaZoNest } = require('./giazonest');
+const { createDealCategories, suggest } = require('./deal-categories');
 
 
 // Admitad tracking links (from Admitad product feeds and deeplinks) already carry the commission.
@@ -30,7 +32,7 @@ const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), cuelinksPageScript = false, storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), giazonest = createGiaZoNest(), cuelinksPageScript = false, storeSearch = null, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -127,12 +129,28 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     const b = req.body || {};
     if (b.name !== undefined) cats.renameCategory(db, req.params.id, b.name);
     if (b.move === 'up' || b.move === 'down') cats.moveCategory(db, req.params.id, b.move === 'up' ? -1 : 1);
+    if (b.icon !== undefined) cats.setIcon(db, req.params.id, String(b.icon));
     return cats.categoryTree(db);
   }));
   app.delete('/api/categories/:id', requireAdmin, edit(req => {
     cats.deleteCategory(db, req.params.id);
     return cats.categoryTree(db);
   }));
+  // Category suggestions from a product name or deal title (see deal-categories.js).
+  app.get('/api/admin/category-suggest', requireAdmin, (req, res) => {
+    res.json(suggest(db, String(req.query.q || '').slice(0, 300), { mode: req.query.mode === 'deal' ? 'deal' : 'product', limit: 3 }));
+  });
+
+  // Seller Catalog: live products from the GiaZoNest shop (see giazonest.js). Read-only; GiaZoNest
+  // already shows the same products to anyone on its shop page.
+  app.get('/api/seller-catalog', async (_req, res) => res.json(await giazonest.list()));
+  app.post('/api/admin/seller-catalog/refresh', requireAdmin, async (_req, res) => res.json(await giazonest.list({ refresh: true })));
+  app.get('/api/seller-catalog/thumb/:id', async (req, res) => {
+    await giazonest.list();
+    const t = giazonest.thumb(req.params.id);
+    if (!t) return res.status(404).type('text/plain').send('No photo.');
+    res.set({ 'Content-Type': t.type, 'Cache-Control': 'public, max-age=1800' }).send(t.data);
+  });
 
   // Search products; each result carries its cheapest effective price.
   app.get('/api/products', (req, res) => {
@@ -273,14 +291,18 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
   const today = () => new Date().toISOString().slice(0, 10);
   const myDealRows = () => db.prepare('SELECT * FROM my_deals ORDER BY id DESC').all();
   const myDeal = d => ({ id: `my-${d.id}`, title: d.title, description: d.description, store: d.store, code: d.code || null,
-    image: d.image || null, url: `/api/go/deal/${d.id}`, endsAt: d.ends_at || null, own: true });
+    image: d.image || null, url: `/api/go/deal/${d.id}`, endsAt: d.ends_at || null, own: true,
+    category: d.category || null, subCategory: d.sub_category || null });
+  const dealCats = createDealCategories(db);
   const admitadDeal = d => ({ ...d, url: `/api/go/admitad/${encodeURIComponent(String(d.id).replace(/^admitad-/, ''))}` });
   const cuelinksDeal = d => ({ ...d, url: `/api/go/cuelinks/${encodeURIComponent(d.id)}` });
   // Order: the owner's own deals, then Admitad, then Cuelinks.
   async function allDeals() {
     const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
     const mine = myDealRows().filter(d => !d.ends_at || d.ends_at >= today()).map(myDeal);
-    return { connected: r.connected || ad.connected || mine.length > 0, deals: [...mine, ...ad.deals.map(admitadDeal), ...r.deals.map(cuelinksDeal)] };
+    // Feed deals get their Comparezo category from the remembered mapping (deal-categories.js).
+    return { connected: r.connected || ad.connected || mine.length > 0,
+      deals: [...mine, ...dealCats.apply('admitad', ad.deals).map(admitadDeal), ...dealCats.apply('cuelinks', r.deals).map(cuelinksDeal)] };
   }
   const dealClicks = createDealClicks(db, { onClick: onChange });
   app.get('/api/deals', async (_req, res) => res.json(await allDeals()));
@@ -349,18 +371,19 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
       } });
   });
   app.get('/api/admin/my-deals', requireAdmin, (_req, res) => res.json(myDealRows()));
-  const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insertDeal = db.prepare('INSERT INTO my_deals (title, store, code, url, description, image, ends_at, category, sub_category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const addDeal = d => Number(insertDeal.run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt, d.category, d.subCategory).lastInsertRowid);
   app.post('/api/admin/my-deals', requireAdmin, (req, res) => {
-    const r = checkDeal(req.body);
+    const r = checkDeal(req.body, db);
     if (r.errors) return res.status(400).json({ errors: r.errors });
-    const d = r.deal;
-    const id = Number(insertDeal.run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt).lastInsertRowid);
+    const id = addDeal(r.deal);
     res.status(201).json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id));
   });
   // Many deals at once, from the spreadsheet the owner uploads. A deal with the same link and
   // coupon code as one already saved is skipped, so the same sheet can be uploaded twice.
   app.post('/api/admin/my-deals/bulk', requireAdmin, (req, res) => {
     const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : [];
+    const defaults = (req.body && req.body.defaults) || {};
     if (!rows.length) return res.status(400).json({ error: 'The sheet has no deal rows.' });
     if (rows.length > 500) return res.status(400).json({ error: `Upload at most 500 deals at a time. This sheet has ${rows.length}.` });
     const have = new Set(myDealRows().map(d => `${d.url}|${d.code || ''}`));
@@ -370,13 +393,15 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     try {
       rows.forEach((row, i) => {
         const url = httpsLink(row.url), image = httpsLink(row.image);
-        const r = checkDeal({ ...row, url, image, store: row.store || storeFromUrl(url) });
+        // Rows without a category use the one picked above the file box.
+        const cat = String(row.category || '').trim() ? { category: row.category, subCategory: row.subCategory } : { category: defaults.category, subCategory: defaults.subCategory };
+        const r = checkDeal({ ...row, ...cat, url, image, store: row.store || storeFromUrl(url) }, db);
         const rowNo = Number(row.row) || i + 2;
         if (r.errors) return problems.push({ row: rowNo, name: String(row.title || '').slice(0, 80), error: r.errors.join(' ') });
         const d = r.deal, k = `${d.url}|${d.code || ''}`;
         if (have.has(k)) { skipped++; return; }
         have.add(k);
-        insertDeal.run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt);
+        addDeal(d);
         added++;
       });
       db.exec('COMMIT');
@@ -390,17 +415,34 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     if (!old) return res.status(404).json({ error: 'Deal not found.' });
     const b = req.body || {};
     const pick = (k, saved) => (Object.prototype.hasOwnProperty.call(b, k) ? b[k] : saved);
+    // A new category without a sub-category clears the old sub-category.
+    const catChanged = Object.prototype.hasOwnProperty.call(b, 'category') && b.category !== old.category;
     const r = checkDeal({ title: pick('title', old.title), store: pick('store', old.store), code: pick('code', old.code), url: pick('url', old.url),
-      description: pick('description', old.description), image: pick('image', old.image), endsAt: pick('endsAt', old.ends_at) });
+      description: pick('description', old.description), image: pick('image', old.image), endsAt: pick('endsAt', old.ends_at),
+      category: pick('category', old.category), subCategory: pick('subCategory', catChanged ? null : old.sub_category) }, db);
     if (r.errors) return res.status(400).json({ errors: r.errors });
     const d = r.deal;
-    db.prepare('UPDATE my_deals SET title = ?, store = ?, code = ?, url = ?, description = ?, image = ?, ends_at = ? WHERE id = ?')
-      .run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt, id);
+    db.prepare('UPDATE my_deals SET title = ?, store = ?, code = ?, url = ?, description = ?, image = ?, ends_at = ?, category = ?, sub_category = ? WHERE id = ?')
+      .run(d.title, d.store, d.code, d.url, d.description, d.image, d.endsAt, d.category, d.subCategory, id);
     res.json(db.prepare('SELECT * FROM my_deals WHERE id = ?').get(id));
   });
   app.delete('/api/admin/my-deals/:id', requireAdmin, (req, res) => {
     const r = db.prepare('DELETE FROM my_deals WHERE id = ?').run(Number(req.params.id));
     if (!r.changes) return res.status(404).json({ error: 'Deal not found.' });
+    res.json({ ok: true });
+  });
+  // "Needs a category": feed-deal categories not mapped yet, and own deals without a category.
+  app.get('/api/admin/deal-categories', requireAdmin, async (_req, res) => {
+    const [ad, r] = await Promise.all([admitad.list(), deals.list()]);
+    res.json({ ...dealCats.pending({ admitad: dealCats.apply('admitad', ad.deals), cuelinks: dealCats.apply('cuelinks', r.deals) }), mapped: dealCats.list() });
+  });
+  app.post('/api/admin/deal-categories', requireAdmin, (req, res) => {
+    const r = dealCats.save(req.body || {});
+    if (r.error) return res.status(400).json({ error: r.error });
+    res.json(r.saved);
+  });
+  app.delete('/api/admin/deal-categories/:source/:name', requireAdmin, (req, res) => {
+    if (!dealCats.remove(req.params.source, req.params.name)) return res.status(404).json({ error: 'Mapping not found.' });
     res.json({ ok: true });
   });
   app.get('/api/admin/deals/check', requireAdmin, async (_req, res) => res.json(await deals.check()));

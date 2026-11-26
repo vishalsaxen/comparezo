@@ -37,6 +37,105 @@ function fillTypes() {
 }
 $('p-cat').addEventListener('change', fillSubs);
 $('p-sub').addEventListener('change', fillTypes);
+const pSel = { cat: $('p-cat'), sub: $('p-sub'), type: $('p-type') };
+for (const el of Object.values(pSel)) el.addEventListener('change', () => clearErrs({ x: el }));
+
+
+/* Required categories: suggestions from the name, inline errors, and checks for sheets.
+   Products need a category, its sub-category, and its type where it has types.
+   Deals need a category (or "Whole store"); the sub-category is optional. */
+const WHOLE = 'Whole store';
+const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+const pathLabel = p => [p.category, p.subCategory, p.type].filter(Boolean).join(' › ');
+// Every path a product (mode 'product') or deal (mode 'deal') can be filed under, for the fix-it dropdowns.
+function allPaths(mode) {
+  const out = mode === 'deal' ? [{ category: WHOLE }] : [];
+  for (const c of tree) {
+    if (mode === 'deal' || !c.subcategories.length) out.push({ category: c.name });
+    for (const sb of c.subcategories) {
+      if (mode === 'deal' || !sb.types.length) out.push({ category: c.name, subCategory: sb.name });
+      if (mode === 'product') for (const t of sb.types) out.push({ category: c.name, subCategory: sb.name, type: t.name });
+    }
+  }
+  return out;
+}
+// A category path typed in a sheet, matched without caring about capitals. Returns { path } or { error }.
+function resolvePath(cat, sub, type, mode = 'product') {
+  if (!String(cat || '').trim()) return { error: 'No category' };
+  if (mode === 'deal' && same(cat, WHOLE)) return String(sub || '').trim() ? { error: 'A whole-store deal has no sub-category' } : { path: { category: WHOLE } };
+  const c = tree.find(x => same(x.name, cat));
+  if (!c) return { error: `"${cat}" is not a category` };
+  if (!String(sub || '').trim()) return mode === 'deal' || !c.subcategories.length ? { path: { category: c.name } } : { error: 'Needs a sub-category' };
+  const sb = c.subcategories.find(x => same(x.name, sub));
+  if (!sb) return { error: `"${sub}" is not in ${c.name}` };
+  if (mode === 'deal') return { path: { category: c.name, subCategory: sb.name } };
+  if (!sb.types.length) return { path: { category: c.name, subCategory: sb.name } };
+  const t = sb.types.find(x => same(x.name, type));
+  return t ? { path: { category: c.name, subCategory: sb.name, type: t.name } } : { error: 'Needs a type' };
+}
+const pathOptions = (mode, ph = 'Pick a category') => `<option value="">${ph}</option>` + allPaths(mode).map(p => `<option value="${esc(JSON.stringify(p))}">${esc(pathLabel(p))}</option>`).join('');
+// Put a path into a form's category selects (they cascade, so each change fills the next one).
+function setSelects(sel, p) {
+  sel.cat.value = p.category || '';
+  sel.cat.dispatchEvent(new Event('change'));
+  if (sel.sub) { sel.sub.value = p.subCategory || ''; sel.sub.dispatchEvent(new Event('change')); }
+  if (sel.type && p.type) sel.type.value = p.type;
+  clearErrs(sel);
+}
+function clearErrs(sel) { for (const el of Object.values(sel)) if (el && el.closest) { const f = el.closest('.field'); if (f) { f.classList.remove('err'); const m = f.querySelector('.msg'); if (m) m.remove(); } } }
+function markErr(el, msg) {
+  const f = el.closest('.field');
+  f.classList.add('err');
+  if (!f.querySelector('.msg')) f.insertAdjacentHTML('beforeend', `<span class="msg" role="alert">${esc(msg)}</span>`);
+}
+// Checks a form's category selects before saving. Marks what's missing and returns false.
+function checkSelects(sel, mode, what) {
+  clearErrs(sel);
+  if (!sel.cat.value) { markErr(sel.cat, mode === 'deal' ? `Pick a category so this ${what} shows in the right place on Super Saver Deals, or "Whole store".` : `Pick a category so shoppers can find this ${what}.`); sel.cat.focus(); return false; }
+  if (mode === 'deal') return true;
+  if (!sel.sub.disabled && !sel.sub.value) { markErr(sel.sub, 'Pick a sub-category.'); sel.sub.focus(); return false; }
+  if (sel.type && !sel.type.closest('.field').hidden && !sel.type.value) { markErr(sel.type, 'Pick a type.'); sel.type.focus(); return false; }
+  return true;
+}
+// "Suggested from the name" chips: Comparezo guesses the category from the words typed (server: deal-categories.js).
+function suggestFrom(input, box, sel, mode) {
+  let timer, last = '';
+  const run = async () => {
+    const q = input.value.trim();
+    if (q === last) return;
+    last = q;
+    if (q.length < 3 || !key) { box.hidden = true; return; }
+    try {
+      const list = await call('GET', `/api/admin/category-suggest?mode=${mode}&q=${encodeURIComponent(q)}`);
+      if (input.value.trim() !== q) return;
+      box.hidden = !list.length;
+      box.innerHTML = `<span class="suggest">${CzCat.icon('wand', 'ci sm')}<span>Suggested from the ${mode === 'deal' ? 'title' : 'name'}:</span>${list.map(p =>
+        `<button type="button" class="chip" data-path="${esc(JSON.stringify(p))}">${CzCat.icon((tree.find(c => c.name === p.category) || {}).icon || 'tag', 'ci sm')}${esc(pathLabel(p))}</button>`).join('')}</span>`;
+      box.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(same(JSON.parse(b.dataset.path).category, sel.cat.value) && same(JSON.parse(b.dataset.path).subCategory || '', sel.sub ? sel.sub.value : ''))));
+    } catch { box.hidden = true; }
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); });
+  input.addEventListener('change', run);
+  box.addEventListener('click', e => {
+    const b = e.target.closest('[data-path]'); if (!b) return;
+    setSelects(sel, JSON.parse(b.dataset.path));
+    box.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+  return { reset() { last = ''; box.hidden = true; } };
+}
+// Deal category selects: "Whole store" first, then the categories; the sub-category is optional.
+const dealCatOptions = () => `<option value="">Pick a category</option><option value="${WHOLE}">★ Whole store (sale on everything)</option>` + opts(tree);
+function dealCascade(cat, sub) {
+  const fill = (want = '') => {
+    const c = tree.find(x => x.name === cat.value);
+    const subs = c ? c.subcategories : [];
+    sub.innerHTML = subs.length ? `<option value="">Any ${esc(c.name)}</option>` + subs.map(x => `<option>${esc(x.name)}</option>`).join('') : `<option value="">${cat.value === WHOLE ? 'None (whole store)' : 'Pick a category first'}</option>`;
+    sub.disabled = !subs.length;
+    if (want) sub.value = want;
+  };
+  cat.addEventListener('change', () => fill());
+  return { fill };
+}
 
 /* Store rows */
 function addOfferRow(box = $('offers')) {
@@ -76,10 +175,11 @@ $('productForm').addEventListener('submit', async e => {
   const body = { name: $('p-name').value.trim(), category: $('p-cat').value, subCategory: $('p-sub').value, type: $('p-type').value,
     spec: $('p-spec').value.trim(), image: $('p-image').value.trim(), offers };
   const st = $('formStatus');
+  if (!checkSelects(pSel, 'product', 'product')) { st.className = 'err'; st.textContent = 'Pick the category first (marked above).'; return; }
   try {
     await call('POST', '/api/admin/products', body);
     st.className = 'ok'; st.textContent = 'Added. It now shows in search and its category.';
-    resetForm(); loadList();
+    resetForm(); pSuggest.reset(); loadList();
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
 });
 
@@ -135,9 +235,9 @@ function openEdit(card, p) {
   form.noValidate = true;
   form.innerHTML = `
     <div class="field full"><label>Product name</label><input data-e="name" maxlength="200" value="${esc(p.name)}"></div>
-    <div class="field"><label>Category</label><select data-e="cat">${opts(tree, 'Pick a category')}</select></div>
-    <div class="field"><label>Sub-category</label><select data-e="sub"></select></div>
-    <div class="field" data-e="type-wrap" hidden><label>Type</label><select data-e="type"></select></div>
+    <div class="field"><label>Category <span class="req" aria-hidden="true">*</span></label><select data-e="cat">${opts(tree, 'Pick a category')}</select></div>
+    <div class="field"><label>Sub-category <span class="req" aria-hidden="true">*</span></label><select data-e="sub"></select></div>
+    <div class="field" data-e="type-wrap" hidden><label>Type <span class="req" aria-hidden="true">*</span></label><select data-e="type"></select></div>
     <div class="field full"><label>Short details</label><input data-e="spec" maxlength="200" value="${esc(p.spec || '')}"></div>
     <div class="field full"><label>Photo link</label><input data-e="image" value="${esc(p.image || '')}" placeholder="https://…"></div>
     <div class="field full"><span class="label">Where to buy</span><div class="offer-rows" data-e="offers"></div>
@@ -167,6 +267,7 @@ function openEdit(card, p) {
     const body = { name: q('name').value.trim(), category: cat.value, subCategory: q('sub').value, type: q('type').value,
       spec: q('spec').value.trim(), image: q('image').value.trim(), offers };
     const st = q('status');
+    if (!checkSelects({ cat, sub: q('sub'), type: q('type') }, 'product', 'product')) { st.className = 'err'; st.textContent = 'Pick the category first.'; return; }
     st.className = ''; st.textContent = 'Saving…';
     try {
       const saved = await call('PATCH', `/api/admin/products/${p.id}`, body);
@@ -222,7 +323,8 @@ let myDeals = [];
 async function loadMyDeals() {
   const list = myDeals = await call('GET', '/api/admin/my-deals');
   $('myDeals').innerHTML = list.length ? list.map(d => `<div class="panel cat-card" data-deal-card="${d.id}"><div class="cat-row">
-      <span class="cat-name">${esc(d.title)} <span class="sub">${d.store ? '· ' + esc(d.store) : ''}${d.code ? ' · code ' + esc(d.code) : ''}</span><br>
+      <span class="cat-name">${esc(d.title)} <span class="sub">${d.store ? '· ' + esc(d.store) : ''}${d.code ? ' · code ' + esc(d.code) : ''}</span>
+      ${d.category ? `<span class="pill">${esc(pathLabel({ category: d.category, subCategory: d.sub_category }))}</span>` : '<span class="pill warn">Needs a category</span>'}<br>
       <span class="sub">${d.ends_at ? (d.ends_at < today() ? 'Ended ' : 'Ends ') + esc(d.ends_at) : 'No end date'} · <a href="${esc(d.url)}" target="_blank" rel="noopener">link</a></span></span>
       <span class="cat-actions"><button type="button" class="btn btn-ghost small" data-edit-deal="${d.id}">Edit</button>
         <button type="button" class="btn btn-ghost small danger" data-del-deal="${d.id}" data-name="${esc(d.title)}">Delete</button></span>
@@ -232,10 +334,12 @@ $('dealForm').addEventListener('submit', async e => {
   e.preventDefault();
   const v = id => $(id).value.trim();
   const st = $('dealFormStatus');
+  if (!checkSelects(dSel, 'deal', 'deal')) { st.className = 'err'; st.textContent = '1 thing to fix: category.'; return; }
   try {
-    await call('POST', '/api/admin/my-deals', { title: v('d-title'), store: v('d-store'), code: v('d-code'), url: v('d-url'), description: v('d-desc'), image: v('d-image'), endsAt: v('d-ends') });
-    st.className = 'ok'; st.textContent = 'Added. It now shows in "Number of deals now".';
+    await call('POST', '/api/admin/my-deals', { title: v('d-title'), store: v('d-store'), code: v('d-code'), url: v('d-url'), description: v('d-desc'), image: v('d-image'), endsAt: v('d-ends'), category: v('d-cat'), subCategory: v('d-sub') });
+    st.className = 'ok'; st.textContent = 'Added. It now shows in "Number of deals now" and under its category.';
     for (const id of ['d-title', 'd-store', 'd-code', 'd-url', 'd-desc', 'd-image', 'd-ends']) $(id).value = '';
+    dSuggest.reset();
     loadMyDeals();
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
 });
@@ -245,6 +349,8 @@ function openDealEdit(card, d) {
   form.noValidate = true;
   form.innerHTML = `
     <div class="field full"><label>Deal title</label><input data-e="title" maxlength="160" value="${esc(d.title)}"></div>
+    <div class="field"><label>Category <span class="req" aria-hidden="true">*</span></label><select data-e="category">${dealCatOptions()}</select></div>
+    <div class="field"><label>Sub-category <span class="opt">optional</span></label><select data-e="subCategory"></select></div>
     <div class="field"><label>Store</label><input data-e="store" maxlength="60" list="d-stores" value="${esc(d.store || '')}"></div>
     <div class="field"><label>Coupon code</label><input data-e="code" maxlength="40" value="${esc(d.code || '')}" placeholder="Leave empty if none"></div>
     <div class="field full"><label>Deal link</label><input data-e="url" inputmode="url" value="${esc(d.url)}"></div>
@@ -259,14 +365,19 @@ function openDealEdit(card, d) {
   card.appendChild(form);
   const q = k => form.querySelector(`[data-e="${k}"]`);
   const btn = card.querySelector('[data-edit-deal]');
+  const eSel = { cat: q('category'), sub: q('subCategory') };
+  if (d.category && ![...eSel.cat.options].some(o => o.value === d.category)) eSel.cat.insertAdjacentHTML('beforeend', `<option>${esc(d.category)}</option>`);
+  eSel.cat.value = d.category || '';
+  dealCascade(eSel.cat, eSel.sub).fill(d.sub_category || '');
   const close = () => { form.remove(); btn.textContent = 'Edit'; };
   q('cancel').addEventListener('click', close);
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    const body = Object.fromEntries(['title', 'store', 'code', 'url', 'description', 'image', 'endsAt'].map(k => [k, q(k).value.trim()]));
+    const body = Object.fromEntries(['title', 'store', 'code', 'url', 'description', 'image', 'endsAt', 'category', 'subCategory'].map(k => [k, q(k).value.trim()]));
     const st = q('status');
+    if (!checkSelects(eSel, 'deal', 'deal')) { st.className = 'err'; st.textContent = 'Pick a category first.'; return; }
     st.className = ''; st.textContent = 'Saving…';
-    try { const saved = await call('PATCH', `/api/admin/my-deals/${d.id}`, body); toast(`Saved ${saved.title}.`); loadMyDeals(); }
+    try { const saved = await call('PATCH', `/api/admin/my-deals/${d.id}`, body); toast(`Saved ${saved.title}.`); loadMyDeals(); loadNeeds(); }
     catch (err) { st.className = 'err'; st.textContent = err.message; }
   });
   btn.textContent = 'Close';
@@ -360,22 +471,53 @@ function parseSheet(rows, FIELD_OF = PRODUCT_FIELDS, skip = x => isExample(x.nam
   return { header, headerRow, rows, items };
 }
 
+// Each row's category: its own Category columns, else the one picked above the file box.
+function rowCategory(x, mode = 'product') {
+  if (x.fix) return { path: x.fix };
+  if (String(x.category || '').trim()) return resolvePath(x.category, x.subCategory, x.type, mode);
+  const d = mode === 'deal' ? { cat: $('db-cat').value, sub: $('db-sub').value } : { cat: $('b-cat').value, sub: $('b-sub').value, type: $('b-type').value };
+  if (!d.cat) return { error: 'No category' };
+  const r = resolvePath(d.cat, d.sub, d.type, mode);
+  return r.error ? { error: `${r.error} (picked above)` } : { path: r.path, fromDefault: true };
+}
+// The preview's category column: ready, or a dropdown to fix it right there.
+function catCell(x, i, mode) {
+  const r = rowCategory(x, mode);
+  if (r.path) return `<td>${esc(pathLabel(r.path))}${r.fromDefault ? ' <span class="sub">(picked above)</span>' : ''}</td><td><span class="pill good">Ready</span></td>`;
+  return `<td><select data-fix="${i}" aria-label="Category for row ${x.row}">${pathOptions(mode)}</select></td><td><span class="pill warn">${esc(r.error)}</span></td>`;
+}
 function showPreview() {
   const items = sheet.items;
   const names = new Set(items.map(x => (x.name || '').toLowerCase()).filter(Boolean));
-  const hasCat = items.some(x => x.category);
-  const missing = items.filter(x => !x.name || !x.url || !x.price).length;
+  const usable = items.filter(x => x.name && x.url && x.price);
+  const missing = items.length - usable.length;
+  // A product is the rows with the same name; the first row with a category gives it its category.
+  const lead = new Map();
+  for (const x of usable) { const k = x.name.toLowerCase(); if (!lead.has(k) || (!String(lead.get(k).category || '').trim() && String(x.category || '').trim())) lead.set(k, x); }
+  const leads = [...lead.values()];
+  const bad = leads.filter(x => !rowCategory(x).path);
+  const shown = [...bad, ...leads.filter(x => !bad.includes(x)).slice(0, Math.max(0, 8 - bad.length))];
   $('bulkPreview').hidden = false;
   $('bulkPreview').innerHTML = `<p class="sub"><strong>${esc(sheet.fileName)}</strong>: ${items.length} row${items.length === 1 ? '' : 's'} for ${names.size} product${names.size === 1 ? '' : 's'}.`
     + (missing ? ` ${missing} row${missing === 1 ? ' is' : 's are'} missing a name, URL or price and will be skipped.` : '')
-    + (hasCat ? ' Rows without a Category use the one picked above.' : ' The sheet has no Category column, so every product goes in the category picked above.') + '</p>'
-    + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th></th><th>Name</th><th>Price</th><th>Store / link</th></tr></thead><tbody>`
-    + items.slice(0, 8).map(x => `<tr><td>${x.row}</td><td>${/^https:\/\//.test(x.image || '') ? `<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</td>
-        <td>${esc(x.name || '—')}</td><td>${esc(x.price || '—')}</td><td>${esc(x.store || '')} <span class="sub">${esc((x.url || '—').slice(0, 60))}</span></td></tr>`).join('')
-    + `</tbody></table></div>${items.length > 8 ? `<p class="sub">…and ${items.length - 8} more.</p>` : ''}`;
-  $('bulkAdd').disabled = !items.length;
+    + (bad.length ? ` <strong class="err">${bad.length} product${bad.length === 1 ? ' needs' : 's need'} a category</strong>: pick it in the table, or set "Category for rows without one" above.` : ' Every product has a category.') + '</p>'
+    + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th></th><th>Name</th><th>Price</th><th>Store / link</th><th>Comparezo category</th><th></th></tr></thead><tbody>`
+    + shown.map(x => `<tr class="${bad.includes(x) ? 'bad-row' : ''}"><td>${x.row}</td><td>${/^https:\/\//.test(x.image || '') ? `<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</td>
+        <td>${esc(x.name || '—')}</td><td>${esc(x.price || '—')}</td><td>${esc(x.store || '')} <span class="sub">${esc((x.url || '—').slice(0, 50))}</span></td>${catCell(x, items.indexOf(x), 'product')}</tr>`).join('')
+    + `</tbody></table></div>${leads.length > shown.length ? `<p class="sub">…and ${leads.length - shown.length} more products, all with a category.</p>` : ''}`;
+  $('bulkAdd').disabled = !usable.length || bad.length > 0;
+  $('bulkAdd').title = bad.length ? 'Every product needs a category first.' : '';
   $('bulkLinks').disabled = !items.some(x => x.url);
 }
+$('bulkPreview').addEventListener('change', e => {
+  const sel = e.target.closest('[data-fix]'); if (!sel || !sheet) return;
+  const x = sheet.items[Number(sel.dataset.fix)];
+  x.fix = sel.value ? JSON.parse(sel.value) : null;
+  // Rows of the same product share it.
+  for (const y of sheet.items) if (y !== x && (y.name || '').toLowerCase() === (x.name || '').toLowerCase()) y.fix = x.fix;
+  showPreview();
+});
+for (const id of ['b-cat', 'b-sub', 'b-type']) $(id).addEventListener('change', () => { if (sheet) showPreview(); });
 
 $('bulkFile').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -398,7 +540,8 @@ $('bulkForm').addEventListener('submit', async e => {
   const st = $('bulkStatus');
   st.className = ''; st.textContent = 'Adding…'; $('bulkAdd').disabled = true;
   try {
-    const r = await call('POST', '/api/admin/products/bulk', { rows: sheet.items, defaults: { category: $('b-cat').value, subCategory: $('b-sub').value, type: $('b-type').value } });
+    const rows = sheet.items.map(({ fix, ...x }) => (fix ? { ...x, category: fix.category, subCategory: fix.subCategory || '', type: fix.type || '' } : x));
+    const r = await call('POST', '/api/admin/products/bulk', { rows, defaults: { category: $('b-cat').value, subCategory: $('b-sub').value, type: $('b-type').value } });
     const parts = [];
     if (r.added) parts.push(`Added ${r.added} new product${r.added === 1 ? '' : 's'}`);
     if (r.updated) parts.push(`added stores to ${r.updated} product${r.updated === 1 ? '' : 's'} already on the site`);
@@ -442,8 +585,8 @@ $('bulkLinks').addEventListener('click', async () => {
 
 
 /* Upload deals from Excel */
-const DEAL_COLUMNS = ['Title', 'Store', 'Coupon code', 'URL', 'Details', 'Image', 'Ends on'];
-const DEAL_WIDTHS = [40, 14, 16, 50, 40, 40, 12];
+const DEAL_COLUMNS = ['Title', 'Category', 'Sub-category', 'Store', 'Coupon code', 'URL', 'Details', 'Image', 'Ends on'];
+const DEAL_WIDTHS = [40, 22, 20, 14, 16, 50, 40, 40, 12];
 const DEAL_FIELDS = {
   title: 'title', deal: 'title', dealtitle: 'title', name: 'title', offer: 'title',
   store: 'store', site: 'store', shop: 'store',
@@ -451,18 +594,20 @@ const DEAL_FIELDS = {
   url: 'url', link: 'url', deallink: 'url', dealurl: 'url', storelink: 'url',
   details: 'description', description: 'description', terms: 'description',
   image: 'image', imageurl: 'image', photo: 'image', photolink: 'image', img: 'image',
+  category: 'category', subcategory: 'subCategory',
   endson: 'endsAt', ends: 'endsAt', enddate: 'endsAt', expiry: 'endsAt', expires: 'endsAt', expirydate: 'endsAt', validtill: 'endsAt', validuntil: 'endsAt',
 };
 let dealSheet = null;
 
 $('dlDealTemplate').addEventListener('click', () => download(Sheet.writeXlsx([DEAL_COLUMNS,
-  ['Example: Flat 40% off on running shoes (rows starting with Example are skipped)', 'Myntra', 'RUN40', 'https://www.myntra.com/…', 'Min. order ₹999', '', '2026-12-31'],
+  ['Example: Flat 40% off on running shoes (rows starting with Example are skipped)', 'Fashion & Clothing', 'Footwear', 'Myntra', 'RUN40', 'https://www.myntra.com/…', 'Min. order ₹999', '', '2026-12-31'],
+  ['Example: Sitewide extra 10% off', 'Whole store', '', 'Ajio', 'AJIO10', 'https://www.ajio.com/…', '', '', ''],
 ], 'Deals', DEAL_WIDTHS), 'comparezo-deals-template.xlsx'));
 
 $('dlDeals').addEventListener('click', async () => {
   try {
     const list = await call('GET', '/api/admin/my-deals');
-    download(Sheet.writeXlsx([DEAL_COLUMNS, ...list.map(d => [d.title, d.store || '', d.code || '', d.url, d.description || '', d.image || '', d.ends_at || ''])], 'Deals', DEAL_WIDTHS), `comparezo-deals-${stamp()}.xlsx`);
+    download(Sheet.writeXlsx([DEAL_COLUMNS, ...list.map(d => [d.title, d.category || '', d.sub_category || '', d.store || '', d.code || '', d.url, d.description || '', d.image || '', d.ends_at || ''])], 'Deals', DEAL_WIDTHS), `comparezo-deals-${stamp()}.xlsx`);
   } catch (err) { toast(err.message); }
 });
 
@@ -476,31 +621,46 @@ $('dealFile').addEventListener('change', async e => {
     const items = dealSheet.items;
     if (!items.length) throw new Error('The sheet has a header row but no deals under it.');
     if (items.length > 500) throw new Error(`Upload at most 500 deals at a time. This sheet has ${items.length}; split it into smaller sheets.`);
-    const missing = items.filter(x => !x.title || !x.url).length;
-    $('dealPreview').hidden = false;
-    $('dealPreview').innerHTML = `<p class="sub"><strong>${esc(file.name)}</strong>: ${items.length} deal${items.length === 1 ? '' : 's'}.`
-      + (missing ? ` ${missing} ${missing === 1 ? 'is' : 'are'} missing a title or URL and will be skipped.` : '') + '</p>'
-      + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th>Title</th><th>Store</th><th>Code</th><th>Ends</th><th>Link</th></tr></thead><tbody>`
-      + items.slice(0, 8).map(x => `<tr><td>${x.row}</td><td>${esc(x.title || '—')}</td><td>${esc(x.store || '')}</td><td>${esc(x.code || '')}</td><td>${esc(x.endsAt || '')}</td><td><span class="sub">${esc((x.url || '—').slice(0, 60))}</span></td></tr>`).join('')
-      + `</tbody></table></div>${items.length > 8 ? `<p class="sub">…and ${items.length - 8} more.</p>` : ''}`;
-    $('dealBulkAdd').disabled = false;
+    showDealPreview();
   } catch (err) { dealSheet = null; st.className = 'err'; st.textContent = err.message; }
 });
 
+function showDealPreview() {
+  const items = dealSheet.items, file = dealSheet.fileName;
+  const usable = items.filter(x => x.title && x.url);
+  const missing = items.length - usable.length;
+  const bad = usable.filter(x => !rowCategory(x, 'deal').path);
+  const shown = [...bad, ...usable.filter(x => !bad.includes(x)).slice(0, Math.max(0, 8 - bad.length))];
+  $('dealPreview').hidden = false;
+  $('dealPreview').innerHTML = `<p class="sub"><strong>${esc(file)}</strong>: ${items.length} deal${items.length === 1 ? '' : 's'}.`
+    + (missing ? ` ${missing} ${missing === 1 ? 'is' : 'are'} missing a title or URL and will be skipped.` : '')
+    + (bad.length ? ` <strong class="err">${bad.length} deal${bad.length === 1 ? ' needs' : 's need'} a category</strong>: pick it in the table, or set "Category for rows without one" above.` : ' Every deal has a category.') + '</p>'
+    + `<div class="tablebox"><table class="bulk-table"><thead><tr><th>Row</th><th>Title</th><th>Store</th><th>Code</th><th>Ends</th><th>Comparezo category</th><th></th></tr></thead><tbody>`
+    + shown.map(x => `<tr class="${bad.includes(x) ? 'bad-row' : ''}"><td>${x.row}</td><td>${esc(x.title || '—')}</td><td>${esc(x.store || '')}</td><td>${esc(x.code || '')}</td><td>${esc(x.endsAt || '')}</td>${catCell(x, items.indexOf(x), 'deal')}</tr>`).join('')
+    + `</tbody></table></div>${usable.length > shown.length ? `<p class="sub">…and ${usable.length - shown.length} more, all with a category.</p>` : ''}`;
+  $('dealBulkAdd').disabled = !usable.length || bad.length > 0;
+}
+$('dealPreview').addEventListener('change', e => {
+  const sel = e.target.closest('[data-fix]'); if (!sel || !dealSheet) return;
+  dealSheet.items[Number(sel.dataset.fix)].fix = sel.value ? JSON.parse(sel.value) : null;
+  showDealPreview();
+});
+for (const id of ['db-cat', 'db-sub']) $(id).addEventListener('change', () => { if (dealSheet) showDealPreview(); });
 $('dealBulkForm').addEventListener('submit', async e => {
   e.preventDefault();
   if (!dealSheet) return;
   const st = $('dealBulkStatus');
   st.className = ''; st.textContent = 'Adding…'; $('dealBulkAdd').disabled = true;
   try {
-    const r = await call('POST', '/api/admin/my-deals/bulk', { rows: dealSheet.items });
+    const rows = dealSheet.items.map(({ fix, ...x }) => (fix ? { ...x, category: fix.category, subCategory: fix.subCategory || '' } : x));
+    const r = await call('POST', '/api/admin/my-deals/bulk', { rows, defaults: { category: $('db-cat').value, subCategory: $('db-sub').value } });
     st.className = r.added ? 'ok' : 'err';
     st.textContent = (r.added ? `Added ${r.added} deal${r.added === 1 ? '' : 's'}` : 'No new deals were added')
       + (r.skipped ? `, skipped ${r.skipped} already saved` : '') + '.'
       + (r.problems.length ? ` ${r.problems.length} row${r.problems.length === 1 ? ' needs' : 's need'} fixing, see below.` : '');
     $('dealProblems').hidden = !r.problems.length;
     $('dealProblems').innerHTML = r.problems.length ? `<span class="label">Rows not added</span><ul class="bulk-problems">${r.problems.slice(0, 100).map(p => `<li>Row ${p.row}${p.name ? ` (${esc(p.name)})` : ''}: ${esc(p.error)}</li>`).join('')}</ul>` : '';
-    if (r.added) loadMyDeals();
+    if (r.added) { loadMyDeals(); loadNeeds(); }
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
   finally { $('dealBulkAdd').disabled = false; }
 });
@@ -533,6 +693,8 @@ function reviewTypes() {
 }
 $('r-cat').addEventListener('change', reviewSubs);
 $('r-sub').addEventListener('change', reviewTypes);
+const rSel = { cat: $('r-cat'), sub: $('r-sub'), type: $('r-type') };
+for (const el of Object.values(rSel)) el.addEventListener('change', () => clearErrs({ x: el }));
 
 $('findForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -615,7 +777,7 @@ function renderReview() {
   const p = picked(), extra = $('r-offers').children.length;
   $('reviewWrap').hidden = !find.searched && !extra;
   $('reviewCount').textContent = p.length + extra ? `${p.length + extra} store${p.length + extra > 1 ? 's' : ''}` : 'Nothing selected yet';
-  if (!find.nameEdited) $('r-name').value = p.length ? suggestName(p) : '';
+  if (!find.nameEdited) { const v = p.length ? suggestName(p) : ''; if ($('r-name').value !== v) { $('r-name').value = v; $('r-name').dispatchEvent(new Event('change')); } }
   if (!p.some(r => r.id === find.photo)) find.photo = (p.find(r => r.image) || {}).id || null;
   const withPhoto = p.filter(r => r.image);
   $('photoPick').innerHTML = withPhoto.length ? withPhoto.map(r => `<label title="${esc(r.store)} photo"><input type="radio" name="r-photo" value="${r.id}" ${r.id === find.photo ? 'checked' : ''}><span></span>${img(r.image)}</label>`).join('')
@@ -664,6 +826,7 @@ $('reviewForm').addEventListener('submit', async e => {
     spec: $('r-spec').value.trim(), image: photo ? photo.image : '',
     offers: [...p.map(r => ({ store: r.store, price: r.price, mrp: r.mrp || undefined, url: r.url })), ...extra] };
   const st = $('r-status');
+  if (!checkSelects(rSel, 'product', 'product')) { st.className = 'err'; st.textContent = 'Pick the category first (marked above).'; return; }
   try {
     await call('POST', '/api/admin/products', body);
     st.className = 'ok'; st.textContent = `Added "${body.name}" with ${body.offers.length} store${body.offers.length > 1 ? 's' : ''}. Shoppers now see it under Comparezo.`;
@@ -674,13 +837,74 @@ $('reviewForm').addEventListener('submit', async e => {
   } catch (err) { st.className = 'err'; st.textContent = err.message; }
 });
 
+/* Needs a category: feed-deal category names to map once, and own deals saved before categories were required. */
+let needs = { feeds: [], mine: [], mapped: [] };
+async function loadNeeds() {
+  try { needs = await call('GET', '/api/admin/deal-categories'); } catch (err) { $('needs').innerHTML = `<p class="sub err">${esc(err.message)}</p>`; return; }
+  renderNeeds();
+}
+const NET = { admitad: 'Admitad', cuelinks: 'Cuelinks' };
+function renderNeeds() {
+  const { feeds, mine, mapped } = needs;
+  const withSugg = feeds.filter(g => g.suggestion).length + mine.filter(d => d.suggestion).length;
+  const row = (attrs, title, from, sugg) => `<div class="needs-row" ${attrs}>
+      <div><div class="t">${esc(title)}</div><div class="sub">${from}</div></div>
+      <div class="needs-pick"><select aria-label="Comparezo category">${pathOptions('deal', 'Pick a category')}</select></div>
+      <div class="needs-act"><button type="button" class="btn btn-brand small" data-confirm>Save</button></div>
+    </div>`.replace('<select', `<select data-sugg="${sugg ? esc(JSON.stringify({ category: sugg.category, subCategory: sugg.subCategory || undefined })) : ''}"`);
+  const total = feeds.length + mine.length;
+  $('needs').innerHTML = (total ? `<div class="panel needs-panel"><div class="needs-bar"><strong>${total} waiting</strong>
+      <span class="sub">${feeds.length ? `${feeds.reduce((a, g) => a + g.count, 0)} feed deal${feeds.reduce((a, g) => a + g.count, 0) === 1 ? '' : 's'} under ${feeds.length} name${feeds.length === 1 ? '' : 's'}` : ''}${feeds.length && mine.length ? ' · ' : ''}${mine.length ? `${mine.length} of your deal${mine.length === 1 ? '' : 's'}` : ''}</span>
+      ${withSugg ? `<button type="button" class="btn btn-ghost small" id="needsAll">${CzCat.icon('check', 'ci sm')} Save all suggestions</button>` : ''}</div>`
+      + feeds.map(g => row(`data-source="${esc(g.source)}" data-name="${esc(g.name)}"`, g.name.startsWith('store:') ? `All ${g.store || g.label} deals` : g.label,
+        `${NET[g.source]} · ${g.name.startsWith('store:') ? 'no category from the network, so mapped by store' : `their category "${esc(g.label)}"`} · ${g.count} deal${g.count === 1 ? '' : 's'}, e.g. “${esc(g.samples[0] || '')}”`, g.suggestion)).join('')
+      + mine.map(d => row(`data-mine="${d.id}"`, d.title, `Your deal${d.store ? ' · ' + esc(d.store) : ''} · saved before categories were required`, d.suggestion)).join('')
+      + '</div>' : '<p class="sub ok-note">Nothing waiting. Every deal has a category.</p>')
+    + (mapped.length ? `<details class="needs-mapped"><summary>Remembered names (${mapped.length})</summary><ul>${mapped.map(m => `<li><span>${NET[m.source] || esc(m.source)} “${esc(m.name.replace(/^store:/, 'store '))}” → <strong>${esc(pathLabel(m))}</strong></span> <button type="button" class="btn btn-ghost small danger" data-unmap="${esc(m.source)}|${esc(m.name)}">Forget</button></li>`).join('')}</ul></details>` : '');
+  $('needs').querySelectorAll('select[data-sugg]').forEach(sel => {
+    if (!sel.dataset.sugg) return;
+    const want = JSON.parse(sel.dataset.sugg);
+    const o = [...sel.options].find(x => { if (!x.value) return false; const p = JSON.parse(x.value); return p.category === want.category && (p.subCategory || '') === (want.subCategory || ''); });
+    if (o) { sel.value = o.value; sel.closest('.needs-row').classList.add('suggested'); }
+  });
+}
+async function saveNeed(rowEl) {
+  const sel = rowEl.querySelector('select');
+  if (!sel.value) { sel.focus(); toast('Pick a category first.'); return false; }
+  const p = JSON.parse(sel.value);
+  if (rowEl.dataset.mine) await call('PATCH', `/api/admin/my-deals/${rowEl.dataset.mine}`, { category: p.category, subCategory: p.subCategory || '' });
+  else await call('POST', '/api/admin/deal-categories', { source: rowEl.dataset.source, name: rowEl.dataset.name, category: p.category, subCategory: p.subCategory || '' });
+  return true;
+}
+$('needs').addEventListener('click', async e => {
+  try {
+    const one = e.target.closest('[data-confirm]');
+    if (one) { if (await saveNeed(one.closest('.needs-row'))) { toast('Saved. Deals with that name now show under it.'); await loadNeeds(); loadMyDeals(); } return; }
+    if (e.target.closest('#needsAll')) {
+      let n = 0;
+      for (const r of [...$('needs').querySelectorAll('.needs-row.suggested')]) if (r.querySelector('select').value && await saveNeed(r)) n++;
+      toast(`Saved ${n} suggestion${n === 1 ? '' : 's'}.`); await loadNeeds(); loadMyDeals(); return;
+    }
+    const un = e.target.closest('[data-unmap]');
+    if (un) { const [src, ...rest] = un.dataset.unmap.split('|'); await call('DELETE', `/api/admin/deal-categories/${encodeURIComponent(src)}/${encodeURIComponent(rest.join('|'))}`); loadNeeds(); }
+  } catch (err) { toast(err.message); }
+});
+$('needs').addEventListener('change', e => { const r = e.target.closest('.needs-row'); if (r) r.classList.remove('suggested'); });
+
+const dSel = { cat: $('d-cat'), sub: $('d-sub') };
+for (const el of Object.values(dSel)) el.addEventListener('change', () => clearErrs({ x: el }));
+const pSuggest = suggestFrom($('p-name'), $('p-suggest'), pSel, 'product');
+const rSuggest = suggestFrom($('r-name'), $('r-suggest'), rSel, 'product');
+const dSuggest = suggestFrom($('d-title'), $('d-suggest'), dSel, 'deal');
+void rSuggest;
+
 /* Unlock */
 async function unlock() {
   try {
     await call('POST', '/api/admin/check');
     keyStore.set(key);
     $('keyForm').hidden = true; $('productForm').hidden = false; $('bulkWrap').hidden = false; $('findWrap').hidden = false;
-    loadList(); loadMyDeals();
+    loadList(); loadMyDeals(); loadNeeds();
   } catch (err) {
     $('keyStatus').className = 'err';
     $('keyStatus').textContent = err.status === 403 ? 'Adding products is turned off. Set ADMIN_KEY on the server first.' : 'That key is not right.';
@@ -711,6 +935,8 @@ $('keyForm').addEventListener('submit', e => { e.preventDefault(); key = $('admi
   $('p-cat').innerHTML = opts(tree, 'Pick a category');
   $('b-cat').innerHTML = opts(tree, 'Pick a category');
   $('r-cat').innerHTML = opts(tree, 'Pick a category');
+  $('d-cat').innerHTML = dealCatOptions(); dealCascade($('d-cat'), $('d-sub')).fill();
+  $('db-cat').innerHTML = dealCatOptions(); dealCascade($('db-cat'), $('db-sub')).fill();
   fillSubs(); bulkSubs(); reviewSubs(); resetForm();
   if (key) unlock();
 })();

@@ -10,6 +10,7 @@ const { createAffAlliances } = require('./affalliances');
 const { createInrDeals } = require('./inrdeals');
 const { createLinkRouting } = require('./link-routing');
 const { loadCatalog } = require('./catalog');
+const { createGiaZoNest } = require('./giazonest');
 const { feedsFromEnv, createFeedRunner } = require('./feeds');
 const { createSync, backendFromEnv } = require('./firestore-sync');
 const { phoneAuthFromEnv, webConfigFromEnv } = require('./spin');
@@ -77,6 +78,8 @@ async function main() {
     linkRouting: createLinkRouting({ cuelinksSkip: process.env.CUELINKS_SKIP || '', redirectHosts: process.env.AFFILIATE_REDIRECT_HOSTS || '' }),
     cuelinksPageScript: /^(on|1|true|yes)$/i.test((process.env.CUELINKS_PAGE_SCRIPT || '').trim()),
     deals: createDeals({ apiKey: (process.env.CUELINKS_API_KEY || '').trim() }),
+    // Seller Catalog reads the live products of the GiaZoNest shop (read-only). Defaults to Vishal's shop.
+    giazonest: createGiaZoNest({ projectId: (process.env.GIAZONEST_PROJECT || 'giazonest').trim(), site: (process.env.GIAZONEST_SITE || 'https://vishalsaxen.github.io/giazonest/').trim() }),
     phoneAuth: phoneAuthFromEnv(process.env),
     firebaseWebConfig: webConfigFromEnv(process.env),
     onChange: store ? () => store.later() : null,

@@ -403,13 +403,13 @@ test('owner can add and delete deals by hand; they show first, hide when expired
     assert.equal((await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
     const bad = await post({ title: '', url: 'http://x' });
     assert.equal(bad.status, 400);
-    assert.equal((await bad.json()).errors.length, 2);
-    const added = await (await post({ title: '40% off shoes', store: 'Myntra', code: 'RUN40', url: 'https://www.myntra.com/shoes', endsAt: '2999-01-01' })).json();
-    await post({ title: 'Old deal', url: 'https://www.ajio.com/sale', endsAt: '2000-01-01' });
+    assert.equal((await bad.json()).errors.length, 3);   // title, link and category
+    const added = await (await post({ title: '40% off shoes', store: 'Myntra', code: 'RUN40', url: 'https://www.myntra.com/shoes', endsAt: '2999-01-01', category: 'fashion & clothing', subCategory: 'footwear' })).json();
+    await post({ title: 'Old deal', url: 'https://www.ajio.com/sale', endsAt: '2000-01-01', category: 'Whole store' });
 
     const pub = await (await fetch(`${base}/api/deals`)).json();
     assert.equal(pub.connected, true);
-    assert.deepEqual(pub.deals.map(d => [d.title, d.store, d.code, d.url]), [['40% off shoes', 'Myntra', 'RUN40', `/api/go/deal/${added.id}`]]);
+    assert.deepEqual(pub.deals.map(d => [d.title, d.store, d.code, d.url, d.category, d.subCategory]), [['40% off shoes', 'Myntra', 'RUN40', `/api/go/deal/${added.id}`, 'Fashion & Clothing', 'Footwear']]);
     const r = await fetch(`${base}${pub.deals[0].url}`, { redirect: 'manual' });
     assert.equal(r.headers.get('location'), 'https://ekaro.in/deal123');
 
@@ -537,7 +537,7 @@ test('admin can edit one field or the whole product, keeping store ids for Buy l
 
 test('admin can edit a hand-added deal', () => withServer(async base => {
   const H = { 'X-Admin-Key': 'k', 'Content-Type': 'application/json' };
-  const d = await (await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: H, body: JSON.stringify({ title: '40% off shoes', url: 'https://www.myntra.com/shoes', store: 'Myntra', code: 'RUN40' }) })).json();
+  const d = await (await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: H, body: JSON.stringify({ title: '40% off shoes', url: 'https://www.myntra.com/shoes', store: 'Myntra', code: 'RUN40', category: 'Fashion & Clothing' }) })).json();
   let r = await fetch(`${base}/api/admin/my-deals/${d.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ endsAt: '31/12/2030' }) });
   let saved = await r.json();
   assert.equal(saved.ends_at, '2030-12-31');

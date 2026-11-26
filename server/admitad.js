@@ -30,6 +30,13 @@ const httpsUrl = u => {
   return /^https:\/\/\S+$/.test(u) ? u : null;
 };
 
+// The first name in a list like [{ id, name }] or ['Fashion'], or a plain string.
+function firstName(v) {
+  const x = Array.isArray(v) ? v[0] : v;
+  const n = x && typeof x === 'object' ? x.name || x.title : x;
+  return typeof n === 'string' && n.trim() ? n.trim().slice(0, 120) : null;
+}
+
 function toDeal(c) {
   const url = httpsUrl(c && c.goto_link);
   if (!url || !c.name) return null;
@@ -44,6 +51,8 @@ function toDeal(c) {
     url,
     endsAt: c.date_end ? String(c.date_end) : null,
     discount: discount.slice(0, 20) || null,
+    // Admitad's own category for the coupon (mapped to a Comparezo category, see deal-categories.js).
+    sourceCategory: firstName(c.categories),
   };
 }
 

@@ -21,6 +21,7 @@ const TABLES = [
   ['earnings_manual', ['network', 'month']],
   ['spin_players', ['phone']],
   ['deal_clicks', ['deal', 'day']],
+  ['deal_category_map', ['source', 'name']],
 ];
 
 const docId = (key, row) => key.length === 1 && Number.isInteger(row[key[0]])

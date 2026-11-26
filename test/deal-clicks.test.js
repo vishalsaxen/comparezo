@@ -40,7 +40,7 @@ test('Super Saver Deals: every Get deal link is counted, bots and double clicks 
   const deals = createDeals({ apiKey: 'c', fetch: async () => ({ ok: true, status: 200, json: async () => ({ offers: [{ id: 7, title: 'Ajio sale', url: 'https://www.ajio.com/sale', store: 'Ajio' }] }) }) });
   await withServer(async ({ base, go, admin, db, changes }) => {
     const h = { 'Content-Type': 'application/json', 'X-Admin-Key': 'k' };
-    await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: h, body: JSON.stringify({ title: '40% off shoes', store: 'Myntra', url: 'https://ad.admitad.com/g/own/' }) });
+    await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: h, body: JSON.stringify({ title: '40% off shoes', store: 'Myntra', url: 'https://ad.admitad.com/g/own/', category: 'Whole store' }) });
     const pub = await (await fetch(`${base}/api/deals`)).json();
     assert.deepEqual(pub.deals.map(d => d.url), ['/api/go/deal/1', '/api/go/admitad/1', '/api/go/cuelinks/7']);
 
@@ -89,7 +89,7 @@ test('Super Saver Deals: every Get deal link is counted, bots and double clicks 
 test('Super Saver Deals: own deals are counted even with no affiliate network connected', async () => {
   await withServer(async ({ base, go, admin }) => {
     const h = { 'Content-Type': 'application/json', 'X-Admin-Key': 'k' };
-    await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: h, body: JSON.stringify({ title: 'Sale', url: 'https://www.myntra.com/sale' }) });
+    await fetch(`${base}/api/admin/my-deals`, { method: 'POST', headers: h, body: JSON.stringify({ title: 'Sale', url: 'https://www.myntra.com/sale', category: 'Whole store' }) });
     const pub = await (await fetch(`${base}/api/deals`)).json();
     assert.equal(pub.deals[0].url, '/api/go/deal/1');
     assert.equal((await go('/api/go/deal/1')).headers.get('location'), 'https://www.myntra.com/sale');
