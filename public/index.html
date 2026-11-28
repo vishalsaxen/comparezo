@@ -7,13 +7,14 @@
 <title>Comparezo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=2026-11-26b">
+<link rel="stylesheet" href="/styles.css?v=2026-11-28">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
-<!-- Shop-shutter gate: shows while the server wakes up, then rolls up (see gate.js). -->
+<!-- Shop-shutter gate: shows while the server wakes up, then the two doors slide apart (see gate.js). -->
 <div id="gate" class="gate" role="status" aria-live="polite">
-  <div class="gate-shutter" aria-hidden="true"></div>
+  <div class="gate-door gate-door-l" aria-hidden="true"></div>
+  <div class="gate-door gate-door-r" aria-hidden="true"></div>
   <div class="gate-awning" aria-hidden="true"></div>
   <div class="gate-center">
     <div class="gate-sign">
