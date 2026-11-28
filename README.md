@@ -193,3 +193,20 @@ Set `CUELINKS_API_KEY` to your Cuelinks API key (cuelinks.com/api-key; a legacy 
 "Buy on <store>" opens that store in a new tab. If the offer has a product link (`offers.url`), it opens that link. Otherwise it opens the store's own search for the product name (see `server/stores.js`). Comparezo doesn't take payment itself.
 
 Each of those clicks is counted in Linezo. Without Firestore connected, the click history is wiped when the free Render server restarts. Confirmed orders come from Cuelinks' own reports.
+
+## Shopping assistant
+
+A chat on the shop page. Shoppers ask "cheapest Tata Tea Gold 1 kg?" or "earbuds under ₹2,000" and get Comparezo's prices, each with a **Buy** button that goes through the usual commission links (`server/assistant.js`, `public/assistant-widget.js`).
+
+- **Where it's controlled:** **Admin → Assistant** (`/assistant.html`, same admin key):
+  - **Show to shoppers:** off by default. When on, an **Ask Comparezo** button appears on the shop page.
+  - **Search stores live when the catalog has nothing:** off by default. It uses Find in stores, so it spends SerpApi, Bright Data and QuickCommerce searches and credits, at most **Live store searches a day**.
+  - **Shopper messages a day:** a cap for everyone together, to protect your Anthropic bill. Each address can also send at most 20 messages per 10 minutes.
+  - **First message:** the greeting shoppers see.
+  - **Extra instructions:** optional, for tone or what to mention.
+  - **Usage:** messages, live searches and tokens per day.
+  - **Try it:** works even while the assistant is off for shoppers.
+- **How it answers:** Claude uses tools that read the Comparezo catalog (`search_products`, `get_product`), plus `search_stores` when live search is on. It's told never to state a price or store that a tool didn't return. It picks the products to show as cards with `show_products`, and the server adds the Buy links. Settings and usage are kept in Firestore with the rest of the data.
+- **Settings on Render:**
+  - `ANTHROPIC_API_KEY`: required, from platform.claude.com → API keys.
+  - `ASSISTANT_MODEL`: optional, default `claude-haiku-5-5`, the fastest and cheapest.

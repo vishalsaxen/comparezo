@@ -124,6 +124,15 @@ CREATE TABLE IF NOT EXISTS deal_category_map (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (source, name)
 );
+-- Shopping assistant (Admin → Assistant): its settings, and messages and costs per day.
+CREATE TABLE IF NOT EXISTS assistant_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS assistant_usage (
+  day TEXT PRIMARY KEY,           -- YYYY-MM-DD, India time
+  messages INTEGER NOT NULL DEFAULT 0,
+  live_searches INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_time ON purchases(created_at);
 `;

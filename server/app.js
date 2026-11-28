@@ -20,6 +20,7 @@ const { createStoreSearch } = require('./store-search');
 const { createSerpApi } = require('./serpapi');
 const { createBrightData, createShoppingSearch } = require('./brightdata');
 const { createQuickCommerce } = require('./quickcommerce');
+const { createAssistant } = require('./assistant');
 const { createPhoneAuth, createSpins } = require('./spin');
 const { createDealClicks, subidFor } = require('./deal-clicks');
 const { createLinkRouting } = require('./link-routing');
@@ -35,7 +36,7 @@ const withSubid = (u, subid) => { if (!subid) return u; try { const x = new URL(
 // Where the static front end is hosted (Firebase Hosting for the "comparezo" project).
 const DEFAULT_ORIGINS = ['https://comparezo.web.app', 'https://comparezo.firebaseapp.com', 'https://comparezo.giazonest.com'];
 
-function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), giazonest = createGiaZoNest(), cuelinksPageScript = false, storeSearch = null, serpapi = createSerpApi(), brightdata = createBrightData(), shoppingOrder = ['serpapi', 'brightdata'], quickcommerce = createQuickCommerce(), phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
+function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner = feeds.createFeedRunner(db), deals = createDeals(), earnkaro = createEarnKaro(), admitad = createAdmitad(), partnerize = createPartnerize(), affalliances = createAffAlliances(), inrdeals = createInrDeals(), linkRouting = createLinkRouting(), giazonest = createGiaZoNest(), cuelinksPageScript = false, storeSearch = null, serpapi = createSerpApi(), brightdata = createBrightData(), shoppingOrder = ['serpapi', 'brightdata'], quickcommerce = createQuickCommerce(), assistantOptions = {}, phoneAuth = createPhoneAuth(), firebaseWebConfig = null, onChange = null, corsOrigins = DEFAULT_ORIGINS }) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   const app = express();
   // The front end can also be served from Firebase Hosting, which calls this API from another address.
@@ -270,6 +271,54 @@ function createApp(db, { uploadsDir, adminKey = '', cuelinksCid = '', feedRunner
     storeSearch = createStoreSearch(db, { sources, notConnected });
   }
   app.get('/api/admin/store-search', requireAdmin, async (req, res) => res.json(await storeSearch.search(req.query.q)));
+
+  // ---------- Shopping assistant (server/assistant.js; settings on /assistant.html) ----------
+  const assistant = createAssistant(db, {
+    compareOffers,
+    buyLink: (o, p) => { const u = buyUrl(o, p.name); return u && viaGo ? `/api/go/${o.id}` : u; },
+    liveSearch: q => storeSearch.search(q),
+    linkFor: url => commissionLink(url),
+    ...assistantOptions,
+  });
+  const isOwner = req => {
+    if (!adminKey) return false;
+    const sent = Buffer.from(String(req.get('x-admin-key') || '')), want = Buffer.from(adminKey);
+    return sent.length === want.length && crypto.timingSafeEqual(sent, want);
+  };
+  // Shoppers: at most 20 messages per 10 minutes from one address.
+  const askLog = new Map();
+  const tooMany = ip => {
+    const now = Date.now(), list = (askLog.get(ip) || []).filter(t => now - t < 600_000);
+    list.push(now); askLog.set(ip, list);
+    if (askLog.size > 5000) askLog.delete(askLog.keys().next().value);
+    return list.length > 20;
+  };
+  app.get('/api/assistant/config', (_req, res) => {
+    const s = assistant.settings();
+    res.json({ enabled: assistant.connected && s.enabled, greeting: s.greeting });
+  });
+  app.post('/api/assistant/chat', async (req, res) => {
+    const owner = isOwner(req);
+    if (!owner && tooMany(String(req.get('x-forwarded-for') || req.ip || '').split(',')[0].trim())) return res.status(429).json({ error: 'That\'s a lot of questions. Please wait a few minutes.' });
+    try {
+      const r = await assistant.chat((req.body || {}).messages, { owner });
+      if (r.error) return res.status(r.status || 400).json({ error: r.error });
+      res.json(r);
+    } catch (e) {
+      console.error('Assistant:', e.message);
+      res.status(502).json({ error: e.message });
+    }
+  });
+  app.get('/api/admin/assistant', requireAdmin, (_req, res) => res.json({
+    connected: assistant.connected, model: assistant.model, settings: assistant.settings(),
+    today: assistant.usageToday(), usage: assistant.usage(14),
+    liveSources: storeSearch && storeSearch.sources ? storeSearch.sources : undefined,
+  }));
+  app.patch('/api/admin/assistant', requireAdmin, (req, res) => {
+    const r = assistant.saveSettings(req.body || {});
+    if (r.errors) return res.status(400).json({ errors: r.errors });
+    res.json(r.settings);
+  });
   // Edit a product: send only the fields to change, or all of them (see updateProduct in catalog.js).
   app.patch('/api/admin/products/:id', requireAdmin, (req, res) => {
     const r = updateProduct(db, Number(req.params.id), req.body || {});

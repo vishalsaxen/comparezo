@@ -156,6 +156,12 @@ function renderDetail() {
 }
 
 $('searchForm').addEventListener('submit', e => { e.preventDefault(); state.q = $('q').value.trim(); loadProducts(); });
+// The shopping assistant's "All prices" button (assistant-widget.js): open that product on the Comparezo tab.
+window.czShowProduct = (id, name) => {
+  state.q = name || ''; $('q').value = state.q; state.cat = state.sub = state.type = null; state.sel = id;
+  if (location.hash.slice(1).split('/')[0] !== 'compare') location.hash = '#compare';
+  loadProducts().then(() => $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+};
 let qTimer;
 $('q').addEventListener('input', e => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value.trim(); loadProducts(); }, 250); });
 $('results').addEventListener('click', e => {
