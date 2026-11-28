@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Shopping assistant · Comparezo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/styles.css?v=2026-11-29a">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+</head>
+<body id="assistantPage">
+<script src="/gate.js"></script>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="logo" href="/" aria-label="Comparezo home">
+      <span class="wm" aria-hidden="true"><span class="wm-c">Compare</span><span class="wm-st"><span class="wm-z">zo</span><span class="wm-e">E</span></span></span>
+    </a>
+    <nav class="tabs" aria-label="Owner pages">
+      <a href="/#compare">Comparezo</a>
+      <a href="/products.html">Add products</a>
+      <a href="/earnings.html">Earnings</a>
+      <a href="/assistant.html" aria-selected="true" aria-current="page">Assistant</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap cat-admin">
+  <div class="lz-head">
+    <div>
+      <div class="eyebrow">Admin</div>
+      <h1 class="lz-title">Shopping assistant</h1>
+      <p class="lede">A chat on the shop page where shoppers ask “cheapest Tata Tea Gold 1 kg?” and get Comparezo's prices with Buy buttons. Try it here first; shoppers only see it once you switch it on.</p>
+    </div>
+    <div class="lz-controls" id="controls" hidden>
+      <span class="as-status off" id="liveBadge">Off for shoppers</span>
+      <button type="button" class="btn btn-ghost" id="logout" title="Remove the admin key from this browser">Log out</button>
+    </div>
+  </div>
+
+  <form class="panel pad key-row" id="keyForm" hidden>
+    <div class="field"><label for="adminKey">Admin key</label><input id="adminKey" type="password" autocomplete="current-password" placeholder="The ADMIN_KEY set on the server"></div>
+    <button class="btn btn-brand" type="submit">Unlock</button>
+    <span id="keyStatus" role="status"></span>
+  </form>
+
+  <div id="board" hidden>
+    <div class="panel pad" id="setupNote" hidden>
+      <h2>One step to set up</h2>
+      <p>The assistant uses Claude from Anthropic. On Render, open the Comparezo service → <strong>Environment</strong> and add <code>ANTHROPIC_API_KEY</code> with a key from <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">platform.claude.com → API keys</a>. Render restarts on its own, then reload this page.</p>
+    </div>
+
+    <div class="as-grid">
+      <section class="panel pad" aria-labelledby="setTitle">
+        <h2 id="setTitle">Controls</h2>
+        <form class="as-form" id="settingsForm">
+          <label class="as-switch"><input type="checkbox" id="enabled"><span>Show to shoppers<span class="sub">Adds an “Ask Comparezo” button to the shop page.</span></span></label>
+          <label class="as-switch"><input type="checkbox" id="liveSearch"><span>Search stores live when the catalog has nothing<span class="sub">Uses Find in stores (SerpApi, Bright Data, QuickCommerce API), so it spends their searches and credits.</span></span></label>
+          <div class="as-two">
+            <div class="field"><label for="dailyLimit">Shopper messages a day</label><input id="dailyLimit" type="number" min="0" max="100000" step="1" inputmode="numeric"></div>
+            <div class="field"><label for="liveLimit">Live store searches a day</label><input id="liveLimit" type="number" min="0" max="100000" step="1" inputmode="numeric"></div>
+          </div>
+          <div class="field"><label for="greeting">First message shoppers see</label><input id="greeting" maxlength="300"></div>
+          <div class="field"><label for="instructions">Extra instructions (optional)</label><textarea id="instructions" maxlength="2000" placeholder="e.g. Always mention free delivery when a store has it. Keep a friendly, simple tone."></textarea></div>
+          <div><button class="btn btn-brand" type="submit" id="save">Save</button> <span id="saveStatus" class="sub" role="status"></span></div>
+        </form>
+        <h2 style="margin-top:22px">Usage</h2>
+        <p class="sub" id="modelLine"></p>
+        <div class="tablebox"><table class="as-usage"><thead><tr><th>Day</th><th>Messages</th><th>Live searches</th><th>Tokens in</th><th>Tokens out</th></tr></thead><tbody id="usage"></tbody></table></div>
+        <p class="sub">Your Anthropic bill depends on tokens. See it at <a href="https://platform.claude.com/usage" target="_blank" rel="noopener noreferrer">platform.claude.com → Usage</a>.</p>
+      </section>
+
+      <section class="panel pad" aria-labelledby="tryTitle">
+        <h2 id="tryTitle">Try it</h2>
+        <p class="sub">Works here even while it's off for shoppers. Your test messages count in Usage.</p>
+        <div class="ac-chat" id="tryChat"></div>
+      </section>
+    </div>
+  </div>
+</main>
+<div class="toast-pop" id="toast" role="status" hidden></div>
+<script src="/assistant-widget.js?v=2026-11-29a"></script>
+<script src="/assistant-admin.js?v=2026-11-29a"></script>
+</body>
+</html>
