@@ -2,7 +2,7 @@
 // 1. Works out where the API lives. On Render the page and the API share one address. On Firebase
 //    Hosting (comparezo.web.app) the page is static, so API calls go to the Render server.
 // 2. On the home page, shows the shop-shutter gate until the server answers and the first products
-//    have loaded, then rolls it up. The free Render server sleeps when idle and can take up to a
+//    are on screen, then slides its two doors apart. The free Render server sleeps when idle and can take up to a
 //    minute to wake, so the gate keeps people company instead of a blank screen.
 (() => {
   const RENDER = 'https://comparezo.onrender.com';
@@ -28,32 +28,33 @@
       const t = setTimeout(() => ctl.abort(), 20000);
       try {
         const r = await fetch('/api/categories', { cache: 'no-store', signal: ctl.signal });
-        if (r.ok && (r.headers.get('content-type') || '').includes('json')) { await r.json(); return; }
+        // The home page reuses this answer instead of asking for the categories a second time.
+        if (r.ok && (r.headers.get('content-type') || '').includes('json')) return await r.json();
       } catch { /* still waking */ } finally { clearTimeout(t); }
       const s = Math.round((Date.now() - started) / 1000);
       say(s < 8 ? 'Unlocking the shutter…' : s < 75 ? `Waking up the shop. This can take up to a minute on the free server (${s}s).` : 'Still opening. Thanks for waiting.');
-      await new Promise(r => setTimeout(r, Math.min(1500 + attempt * 500, 4000)));
+      await new Promise(r => setTimeout(r, Math.min(800 + attempt * 500, 4000)));
     }
   }
-  window.czReady = waitForServer().then(() => {
+  window.czReady = waitForServer().then(categories => {
     // Cuelinks script (turns store links into commission links) comes from the API server.
     const s = document.createElement('script');
     s.src = API + '/affiliate.js'; s.defer = true;
     document.body.appendChild(s);
+    return categories;
   });
 
-  // The home page calls this once its first products are on screen.
+  // The home page calls this once its product list is on screen. Calling it again does nothing.
   window.czOpenGate = (error) => {
     if (!gate || gate.classList.contains('open')) return;
     if (error) { say(error); gate.classList.add('stuck'); return; }
     // Keep the shutter down a moment on fast loads so it doesn't flash.
-    const wait = Math.max(0, 600 - (Date.now() - started));
+    const wait = Math.max(0, 250 - (Date.now() - started));
     setTimeout(() => {
       gate.classList.add('open');
       gate.setAttribute('aria-hidden', 'true');
       document.documentElement.classList.remove('gated');
-      gate.addEventListener('transitionend', () => gate.remove(), { once: true });
-      setTimeout(() => gate.remove(), 2000);
+      setTimeout(() => gate.remove(), 700);   // the doors take 0.5s to slide away (styles.css)
     }, wait);
   };
 })();

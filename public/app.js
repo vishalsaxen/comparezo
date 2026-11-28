@@ -101,6 +101,7 @@ async function loadProducts() {
   state.products = await api('/api/products?' + p);
   if (!state.products.some(x => x.id === state.sel)) state.sel = state.products[0]?.id ?? null;
   renderResults();
+  window.czOpenGate?.();   // first load: open the shutter as soon as the list is on screen (gate.js)
   await loadDetail();
 }
 function renderResults() {
@@ -525,8 +526,8 @@ const subsOf = name => (categories.find(c => c.name === name) || { subcategories
 const subNames = name => subsOf(name).map(s => s.name);
 const typesOf = (name, sub) => (subsOf(name).find(s => s.name === sub) || { types: [] }).types.map(t => t.name);
 const opt = (v, label = v) => `<option value="${esc(v)}">${esc(label)}</option>`;
-async function loadCategories() {
-  const fresh = await api('/api/categories');
+async function loadCategories(preloaded) {
+  const fresh = preloaded || await api('/api/categories');
   if (JSON.stringify(fresh) === JSON.stringify(categories)) return false;
   categories = fresh;
   // Keep what the user picked if it still exists.
@@ -543,8 +544,8 @@ window.addEventListener('focus', () => loadCategories().then(changed => { if (ch
 
 /* ---------- Boot ---------- */
 (async () => {
-  await window.czReady;   // the gate stays down until the server is awake (gate.js)
-  await loadCategories();
+  // The gate stays down until the server is awake (gate.js); its categories answer is reused here.
+  await loadCategories(await window.czReady);
   route();
   booted = true;
   await Promise.all([loadProducts(), loadCompareCounts().catch(() => {}), loadNewArrivals().catch(() => {}), loadDeals().catch(() => {})]);
